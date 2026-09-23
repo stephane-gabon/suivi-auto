@@ -3,8 +3,8 @@ name: Build Android APK
 on:
   push:
     branches:
-      - main
-      - master
+    - main
+    - master
   workflow_dispatch:
 
 jobs:
@@ -66,7 +66,7 @@ jobs:
           mkdir -p "$SDK"
 
           if [ ! -x "$SDK/cmdline-tools/latest/bin/sdkmanager" ]; then
-            echo "Installation des Android Command Line Tools..."
+            echo "===== Installation des Android Command Line Tools ====="
 
             rm -rf "$SDK/cmdline-tools"
             mkdir -p "$SDK/cmdline-tools"
@@ -90,19 +90,36 @@ jobs:
           echo "===== sdkmanager ====="
           "$SDK/cmdline-tools/latest/bin/sdkmanager" --version
 
+          echo "===== Création du chemin attendu par Buildozer ====="
+
           mkdir -p "$SDK/tools/bin"
 
           ln -sf "$SDK/cmdline-tools/latest/bin/sdkmanager" "$SDK/tools/bin/sdkmanager"
           ln -sf "$SDK/cmdline-tools/latest/bin/avdmanager" "$SDK/tools/bin/avdmanager"
 
-      - name: Configure Android SDK licenses
+          echo "sdkmanager:"
+          ls -l "$SDK/tools/bin/sdkmanager"
+
+      - name: Accept Android SDK licenses
         run: |
+          export JAVA_HOME="/usr/lib/jvm/java-17-openjdk-amd64"
+          export PATH="$JAVA_HOME/bin:$PATH"
+
           SDK="$HOME/.buildozer/android/platform/android-sdk"
 
-          mkdir -p "$SDK/licenses"
+          echo "===== Acceptation des licences Android ====="
 
-          echo "8933bad161af4178b1185d1a37fbf41ea5269c55" > "$SDK/licenses/android-sdk-license"
-          echo "84831bc465f9d3bcfbb8c55f9d851f47" > "$SDK/licenses/android-sdk-preview-license"
+          yes | "$SDK/cmdline-tools/latest/bin/sdkmanager" \
+            --sdk_root="$SDK" \
+            --licenses || true
+
+          echo "===== Licences présentes ====="
+
+          if [ -d "$SDK/licenses" ]; then
+            find "$SDK/licenses" -maxdepth 1 -type f -print
+          else
+            echo "Aucun dossier licenses trouvé."
+          fi
 
       - name: Install Android SDK components
         run: |
@@ -111,7 +128,7 @@ jobs:
 
           SDK="$HOME/.buildozer/android/platform/android-sdk"
 
-          echo "===== Installation SDK ====="
+          echo "===== Installation Android SDK ====="
 
           "$SDK/cmdline-tools/latest/bin/sdkmanager" \
             --sdk_root="$SDK" \
@@ -119,7 +136,8 @@ jobs:
             "platforms;android-33" \
             "build-tools;33.0.2"
 
-          echo "===== SDK components installés ====="
+          echo "===== Composants installés ====="
+
           "$SDK/cmdline-tools/latest/bin/sdkmanager" \
             --sdk_root="$SDK" \
             --list_installed
@@ -137,8 +155,11 @@ jobs:
           echo "===== AIDL ====="
           find "$SDK/build-tools" -name aidl -type f -print
 
-          echo "===== Platform ====="
+          echo "===== Platform Android 33 ====="
           ls -lah "$SDK/platforms/android-33"
+
+          echo "===== Platform Tools ====="
+          ls -lah "$SDK/platform-tools"
 
       - name: Build APK
         run: |
@@ -159,4 +180,3 @@ jobs:
           path: bin/*.apk
           if-no-files-found: error
           retention-days: 30
-
