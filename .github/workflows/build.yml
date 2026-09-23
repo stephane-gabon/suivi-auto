@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v4   # ✅ Node.js 24 compatible
+        uses: actions/checkout@v4
 
       - name: Install dependencies
         run: |
@@ -18,7 +18,7 @@ jobs:
           pip install --upgrade pip
           pip install --upgrade buildozer cython
 
-      - name: Install Android SDK + accept licenses
+      - name: Install Android SDK + force licenses
         run: |
           # Télécharger les outils Android
           wget https://dl.google.com/android/repository/commandlinetools-linux-10406996_latest.zip -O cmdline-tools.zip
@@ -28,20 +28,22 @@ jobs:
           export ANDROID_HOME=$HOME/android-sdk
           export PATH=$ANDROID_HOME/cmdline-tools/cmdline-tools/bin:$ANDROID_HOME/platform-tools:$PATH
           
-          # Déplacer les outils dans "latest" pour que Buildozer les trouve
+          # Déplacer les outils dans "latest"
           mkdir -p $ANDROID_HOME/cmdline-tools/latest
           mv $ANDROID_HOME/cmdline-tools/cmdline-tools/* $ANDROID_HOME/cmdline-tools/latest/
           
-          # Acceptation automatique de toutes les licences
-          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
+          # Créer les licences manuellement pour contourner la validation
+          mkdir -p $ANDROID_HOME/licenses
+          echo -e "\n8933bad161af4178b1185d1a37fbf41ea5269c55" > $ANDROID_HOME/licenses/android-sdk-license
+          echo -e "\n84831bc465f9d3bcfbb8c55f9d851f47" > $ANDROID_HOME/licenses/android-sdk-preview-license
           
-          # Installer les SDK et Build-Tools nécessaires (dernières versions)
+          # Installer les SDK et Build-Tools nécessaires
           $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager \
             "platform-tools" \
-            "platforms;android-34" \
             "platforms;android-33" \
-            "build-tools;34.0.0" \
+            "platforms;android-34" \
             "build-tools;33.0.2" \
+            "build-tools;34.0.0" \
             "build-tools;37.0.0"
 
       - name: Build APK
@@ -49,7 +51,7 @@ jobs:
           buildozer -v android debug
 
       - name: Upload APK artifact
-        uses: actions/upload-artifact@v4   # ✅ Node.js 24 compatible
+        uses: actions/upload-artifact@v4
         with:
           name: car-maintenance-apk
           path: bin/*.apk
