@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v4   # ✅ mise à jour vers v4
+        uses: actions/checkout@v4   # ✅ version compatible Node.js 24
 
       - name: Install dependencies
         run: |
@@ -19,18 +19,16 @@ jobs:
 
       - name: Init buildozer
         run: |
-          cd car_maintenance_app
           buildozer init
           sed -i 's/^requirements =.*/requirements = python3,kivy,plyer,reportlab,openpyxl,pandas/' buildozer.spec
           echo "android.permissions = CAMERA,READ_EXTERNAL_STORAGE,WRITE_EXTERNAL_STORAGE,POST_NOTIFICATIONS" >> buildozer.spec
 
       - name: Build APK
         run: |
-          cd car_maintenance_app
           buildozer -v android debug
 
       - name: Upload APK artifact
-        uses: actions/upload-artifact@v4   # ✅ mise à jour vers v4
+        uses: actions/upload-artifact@v4   # ✅ version compatible Node.js 24
         with:
           name: car-maintenance-apk
           path: bin/*.apk
