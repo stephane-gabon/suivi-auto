@@ -33,4 +33,4 @@ jobs:
         uses: actions/upload-artifact@v4   # ✅ mise à jour vers v4
         with:
           name: car-maintenance-apk
-          path: car_maintenance_app/bin/*.apk
+          path: bin/*.apk
