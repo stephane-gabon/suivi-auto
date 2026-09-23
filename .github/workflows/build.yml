@@ -1,17 +1,17 @@
 name: Build Android APK
 
 on:
- push:
-  branches:
-   - main
-   - master
- workflow_dispatch:
-
+  push:
+   branches:
+    - main
+    - master
+  workflow_dispatch:
+ 
 jobs:
- build:
-  runs-on: ubuntu-22.04
+  build:
+   runs-on: ubuntu-22.04
   
- steps:
+   steps:
     - name: Checkout
       uses: actions/checkout@v4
 
@@ -32,12 +32,12 @@ jobs:
     - name: Cache Buildozer
       uses: actions/cache@v4
       with:
-      path: |
-        ~/.buildozer
-        ~/.gradle/caches
-        ~/.gradle/wrapper
-      key: buildozer-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}
-      restore-keys: |
+       path: |
+         ~/.buildozer
+         ~/.gradle/caches
+         ~/.gradle/wrapper
+       key: buildozer-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}
+       restore-keys: |
         buildozer-${{ runner.os }}-
 
     - name: Install Android Command Line Tools
@@ -133,8 +133,8 @@ jobs:
       if: success()
       uses: actions/upload-artifact@v4
       with:
-      name: suivi-auto-apk
-      path: bin/*.apk
-   if-no-files-found: error
-   retention-days: 30
+       name: suivi-auto-apk
+       path: bin/*.apk
+       if-no-files-found: error
+       retention-days: 30
       
