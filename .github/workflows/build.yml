@@ -1,57 +1,147 @@
-name: Build Kivy APK
+name: Build Android APK
 
 on:
-  push:
-    branches: [ main ]
+push:
+branches:
+- main
+- master
+workflow_dispatch:
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
+build:
+runs-on: ubuntu-22.04
 
-      - name: Install dependencies
-        run: |
-          sudo apt update
-          sudo apt install -y python3-pip python3-setuptools git zip unzip openjdk-17-jdk wget tar
-          pip install --upgrade pip
-          pip install --upgrade buildozer cython
+```
+steps:
+  # ---------------------------------------------------------
+  # 1. Récupérer le code
+  # ---------------------------------------------------------
+  - name: Checkout
+    uses: actions/checkout@v4
 
-      - name: Install Android SDK + force licenses
-        run: |
-          # Télécharger les outils Android
-          wget https://dl.google.com/android/repository/commandlinetools-linux-10406996_latest.zip -O cmdline-tools.zip
-          mkdir -p $HOME/android-sdk/cmdline-tools
-          unzip -q cmdline-tools.zip -d $HOME/android-sdk/cmdline-tools
-          
-          export ANDROID_HOME=$HOME/android-sdk
-          export PATH=$ANDROID_HOME/cmdline-tools/cmdline-tools/bin:$ANDROID_HOME/platform-tools:$PATH
-          
-          # Déplacer les outils dans "latest"
-          mkdir -p $ANDROID_HOME/cmdline-tools/latest
-          mv $ANDROID_HOME/cmdline-tools/cmdline-tools/* $ANDROID_HOME/cmdline-tools/latest/
-          
-          # Créer les licences manuellement pour contourner la validation
-          mkdir -p $ANDROID_HOME/licenses
-          echo -e "\n8933bad161af4178b1185d1a37fbf41ea5269c55" > $ANDROID_HOME/licenses/android-sdk-license
-          echo -e "\n84831bc465f9d3bcfbb8c55f9d851f47" > $ANDROID_HOME/licenses/android-sdk-preview-license
-          
-          # Installer les SDK et Build-Tools nécessaires
-          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager \
-            "platform-tools" \
-            "platforms;android-33" \
-            "platforms;android-34" \
-            "build-tools;33.0.2" \
-            "build-tools;34.0.0" \
-            "build-tools;37.0.0"
+  # ---------------------------------------------------------
+  # 2. Installer Python / Java / dépendances système
+  # ---------------------------------------------------------
+  - name: Install system dependencies
+    run: |
+      sudo apt-get update
 
-      - name: Build APK
-        run: |
-          buildozer -v android debug
+      sudo apt-get install -y \
+        python3-pip \
+        python3-setuptools \
+        python3-venv \
+        git \
+        zip \
+        unzip \
+        openjdk-17-jdk \
+        wget \
+        curl \
+        tar
 
-      - name: Upload APK artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: car-maintenance-apk
-          path: bin/*.apk
+      java -version
+      python3 --version
+
+  # ---------------------------------------------------------
+  # 3. Cache pip
+  # ---------------------------------------------------------
+  - name: Get pip cache directory
+    id: pip-cache
+    run: |
+      echo "dir=$(python3 -m pip cache dir)" >> "$GITHUB_OUTPUT"
+
+  - name: Cache pip
+    uses: actions/cache@v4
+    with:
+      path: ${{ steps.pip-cache.outputs.dir }}
+      key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt', '**/buildozer.spec') }}
+      restore-keys: |
+        ${{ runner.os }}-pip-
+
+  # ---------------------------------------------------------
+  # 4. Installer Buildozer + Cython
+  # ---------------------------------------------------------
+  - name: Install Python dependencies
+    run: |
+      python3 -m pip install --upgrade pip setuptools wheel
+      python3 -m pip install --upgrade buildozer cython
+
+      buildozer --version
+      cython --version
+
+  # ---------------------------------------------------------
+  # 5. Cache Buildozer
+  #
+  # Contient notamment :
+  # - Android SDK
+  # - Android NDK
+  # - python-for-android
+  # - téléchargements et compilations intermédiaires
+  # ---------------------------------------------------------
+  - name: Cache Buildozer
+    uses: actions/cache@v4
+    with:
+      path: |
+        ~/.buildozer
+        ~/.gradle/caches
+        ~/.gradle/wrapper
+      key: ${{ runner.os }}-buildozer-api33-ndk25b-${{ hashFiles('buildozer.spec') }}
+      restore-keys: |
+        ${{ runner.os }}-buildozer-api33-ndk25b-
+
+  # ---------------------------------------------------------
+  # 6. Préparer les licences Android
+  #
+  # Buildozer utilise son propre SDK sous ~/.buildozer
+  # ---------------------------------------------------------
+  - name: Configure Android SDK licenses
+    run: |
+      mkdir -p "$HOME/.buildozer/android/platform/android-sdk/licenses"
+
+      echo "8933bad161af4178b1185d1a37fbf41ea5269c55" \
+        > "$HOME/.buildozer/android/platform/android-sdk/licenses/android-sdk-license"
+
+      echo "84831bc465f9d3bcfbb8c55f9d851f47" \
+        > "$HOME/.buildozer/android/platform/android-sdk/licenses/android-sdk-preview-license"
+
+  # ---------------------------------------------------------
+  # 7. Vérifier la configuration Buildozer
+  # ---------------------------------------------------------
+  - name: Show Buildozer configuration
+    run: |
+      echo "===== buildozer.spec ====="
+      cat buildozer.spec
+
+      echo "===== Environment ====="
+      java -version
+      python3 --version
+      buildozer --version
+
+  # ---------------------------------------------------------
+  # 8. Construire l'APK
+  # ---------------------------------------------------------
+  - name: Build APK
+    run: |
+      buildozer -v android debug
+
+  # ---------------------------------------------------------
+  # 9. Vérifier l'APK généré
+  # ---------------------------------------------------------
+  - name: List generated APK
+    if: success()
+    run: |
+      echo "===== Generated APK files ====="
+      ls -lah bin/
+      find bin -maxdepth 1 -type f -name "*.apk" -print
+
+  # ---------------------------------------------------------
+  # 10. Sauvegarder l'APK comme artifact GitHub
+  # ---------------------------------------------------------
+  - name: Upload APK artifact
+    if: success()
+    uses: actions/upload-artifact@v4
+    with:
+      name: suivi-auto-apk
+      path: bin/*.apk
+      if-no-files-found: error
+      retention-days: 30
+```
