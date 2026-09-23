@@ -16,7 +16,7 @@ jobs:
           sudo apt update
           sudo apt install -y python3-pip python3-setuptools git zip unzip openjdk-17-jdk wget tar
           pip install --upgrade pip
-          pip install buildozer cython
+          pip install --upgrade buildozer cython
 
       - name: Install Android SDK + accept licenses
         run: |
@@ -26,7 +26,7 @@ jobs:
           unzip -q cmdline-tools.zip -d $HOME/android-sdk/cmdline-tools
           
           export ANDROID_HOME=$HOME/android-sdk
-          export PATH=$ANDROID_HOME/cmdline-tools/bin:$ANDROID_HOME/platform-tools:$PATH
+          export PATH=$ANDROID_HOME/cmdline-tools/cmdline-tools/bin:$ANDROID_HOME/platform-tools:$PATH
           
           # Déplacer les outils dans "latest" pour que Buildozer les trouve
           mkdir -p $ANDROID_HOME/cmdline-tools/latest
@@ -35,7 +35,7 @@ jobs:
           # Accepter toutes les licences automatiquement
           yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses
           
-          # Installer les SDK et Build-Tools nécessaires
+          # Installer les SDK et Build-Tools nécessaires (dernières versions)
           $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager \
             "platform-tools" \
             "platforms;android-34" \
