@@ -1,0 +1,74 @@
+#:import theme theme
+
+<CarteBlanche@BoxLayout>:
+    canvas.before:
+        Color:
+            rgba: theme.BLANC
+        RoundedRectangle:
+            pos: self.pos
+            size: self.size
+            radius: theme.RAYON_COIN
+    padding: "14dp"
+    spacing: "8dp"
+
+<BoutonPrincipal@Button>:
+    background_normal: ""
+    background_color: theme.BLEU
+    color: theme.BLANC
+    font_size: theme.TAILLE_TEXTE
+    size_hint_y: None
+    height: "46dp"
+
+<BoutonSecondaire@Button>:
+    background_normal: ""
+    background_color: theme.GRIS_CLAIR
+    color: theme.GRIS_FONCE
+    font_size: theme.TAILLE_TEXTE
+    size_hint_y: None
+    height: "46dp"
+
+<TitreEcran@Label>:
+    font_size: theme.TAILLE_TITRE
+    color: theme.GRIS_FONCE
+    bold: True
+    size_hint_y: None
+    height: "40dp"
+    halign: "left"
+    text_size: self.size
+
+<ChampSaisie@TextInput>:
+    background_color: theme.GRIS_CLAIR
+    foreground_color: theme.GRIS_FONCE
+    cursor_color: theme.BLEU
+    padding: "10dp", "10dp"
+    size_hint_y: None
+    height: "44dp"
+    multiline: False
+
+<RootLayout>:
+    orientation: "vertical"
+    canvas.before:
+        Color:
+            rgba: theme.GRIS_CLAIR
+        Rectangle:
+            pos: self.pos
+            size: self.size
+
+    ScreenManager:
+        id: screen_manager
+
+    BoxLayout:
+        id: barre_navigation
+        size_hint_y: None
+        height: "64dp"
+        canvas.before:
+            Color:
+                rgba: theme.BLANC
+            Rectangle:
+                pos: self.pos
+                size: self.size
+            Color:
+                rgba: theme.GRIS_CLAIR
+            Line:
+                points: [self.x, self.top, self.x + self.width, self.top]
+                width: 1
