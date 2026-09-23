@@ -2,162 +2,161 @@ name: Build Android APK
 
 on:
   push:
-   branches:
-    - main
-    - master
+    branches:
+      - main
+      - master
   workflow_dispatch:
- 
+
 jobs:
   build:
-   runs-on: ubuntu-22.04
-  
-   steps:
-    - name: Checkout
-      uses: actions/checkout@v4
+    runs-on: ubuntu-22.04
 
-    - name: Install system dependencies
-      run: |
-       sudo apt-get update
-       sudo apt-get install -y python3-pip python3-setuptools python3-venv git zip unzip openjdk-17-jdk wget curl tar
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
-       echo "===== Java installations ====="
-       ls -la /usr/lib/jvm/
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-pip python3-setuptools python3-venv git zip unzip openjdk-17-jdk wget curl tar
 
-       echo "===== Configuration Java 17 ====="
-       JAVA17_HOME="/usr/lib/jvm/java-17-openjdk-amd64"
+          JAVA17_HOME="/usr/lib/jvm/java-17-openjdk-amd64"
 
-       if [ ! -d "$JAVA17_HOME" ]; then
-         echo "ERREUR : Java 17 introuvable dans $JAVA17_HOME"
-         exit 1
-       fi
+          echo "JAVA_HOME=$JAVA17_HOME" >> "$GITHUB_ENV"
+          echo "$JAVA17_HOME/bin" >> "$GITHUB_PATH"
 
-       echo "JAVA_HOME=$JAVA17_HOME" >> "$GITHUB_ENV"
-       echo "$JAVA17_HOME/bin" >> "$GITHUB_PATH"
+          export JAVA_HOME="$JAVA17_HOME"
+          export PATH="$JAVA17_HOME/bin:$PATH"
 
-       export JAVA_HOME="$JAVA17_HOME"
-       export PATH="$JAVA17_HOME/bin:$PATH"
+          echo "===== Java ====="
+          java -version
 
-       echo "===== Java utilisé ====="
-       echo "JAVA_HOME=$JAVA_HOME"
-       which java
-       java -version
+          echo "===== Python ====="
+          python3 --version
 
-       echo "===== Python ====="
-       python3 --version
+      - name: Install Buildozer and Cython
+        run: |
+          python3 -m pip install --upgrade pip setuptools wheel
+          python3 -m pip install --upgrade buildozer cython
 
-    - name: Install Buildozer and Cython
-      run: |
-       python3 -m pip install --upgrade pip setuptools wheel
-       python3 -m pip install --upgrade buildozer cython
-       buildozer --version
-       cython --version
+          echo "===== Buildozer ====="
+          buildozer --version
 
-    - name: Cache Buildozer
-      uses: actions/cache@v4
-      with:
-       path: |
-         ~/.buildozer
-         ~/.gradle/caches
-         ~/.gradle/wrapper
-       key: buildozer-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}
-       restore-keys: |
-        buildozer-${{ runner.os }}-
+          echo "===== Cython ====="
+          cython --version
 
-    - name: Install Android Command Line Tools
-      run: |
-       SDK="$HOME/.buildozer/android/platform/android-sdk"
+      - name: Cache Buildozer
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.buildozer
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: buildozer-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}
+          restore-keys: |
+            buildozer-${{ runner.os }}-
 
-       mkdir -p "$SDK"
+      - name: Install Android Command Line Tools
+        run: |
+          export JAVA_HOME="/usr/lib/jvm/java-17-openjdk-amd64"
+          export PATH="$JAVA_HOME/bin:$PATH"
 
-       if [ ! -x "$SDK/cmdline-tools/latest/bin/sdkmanager" ]; then
-        echo "Installation des Android Command Line Tools..."
+          SDK="$HOME/.buildozer/android/platform/android-sdk"
 
-        rm -rf "$SDK/cmdline-tools"
-        mkdir -p "$SDK/cmdline-tools"
+          mkdir -p "$SDK"
 
-        wget -q https://dl.google.com/android/repository/commandlinetools-linux-10406996_latest.zip \
-          -O /tmp/cmdline-tools.zip
+          if [ ! -x "$SDK/cmdline-tools/latest/bin/sdkmanager" ]; then
+            echo "Installation des Android Command Line Tools..."
 
-        unzip -q /tmp/cmdline-tools.zip -d "$SDK/cmdline-tools"
+            rm -rf "$SDK/cmdline-tools"
+            mkdir -p "$SDK/cmdline-tools"
 
-        mkdir -p "$SDK/cmdline-tools/latest"
+            wget -q https://dl.google.com/android/repository/commandlinetools-linux-10406996_latest.zip \
+              -O /tmp/cmdline-tools.zip
 
-        mv "$SDK/cmdline-tools/cmdline-tools/"* \
-          "$SDK/cmdline-tools/latest/"
+            unzip -q /tmp/cmdline-tools.zip -d "$SDK/cmdline-tools"
 
-        rm -rf "$SDK/cmdline-tools/cmdline-tools"
-       fi
+            mkdir -p "$SDK/cmdline-tools/latest"
 
-       echo "Vérification du sdkmanager moderne..."
-       "$SDK/cmdline-tools/latest/bin/sdkmanager" --version
+            mv "$SDK/cmdline-tools/cmdline-tools/"* \
+              "$SDK/cmdline-tools/latest/"
 
-       echo "Création du chemin attendu par Buildozer..."
+            rm -rf "$SDK/cmdline-tools/cmdline-tools"
+          fi
 
-       mkdir -p "$SDK/tools/bin"
+          echo "===== Java ====="
+          java -version
 
-       ln -sf \
-        "$SDK/cmdline-tools/latest/bin/sdkmanager" \
-        "$SDK/tools/bin/sdkmanager"
+          echo "===== sdkmanager ====="
+          "$SDK/cmdline-tools/latest/bin/sdkmanager" --version
 
-       ln -sf \
-        "$SDK/cmdline-tools/latest/bin/avdmanager" \
-        "$SDK/tools/bin/avdmanager"
+          mkdir -p "$SDK/tools/bin"
 
-       echo "sdkmanager final :"
-       ls -l "$SDK/tools/bin/sdkmanager"
+          ln -sf "$SDK/cmdline-tools/latest/bin/sdkmanager" "$SDK/tools/bin/sdkmanager"
+          ln -sf "$SDK/cmdline-tools/latest/bin/avdmanager" "$SDK/tools/bin/avdmanager"
 
-    - name: Configure Android SDK licenses
-      run: |
-       SDK="$HOME/.buildozer/android/platform/android-sdk"
+      - name: Configure Android SDK licenses
+        run: |
+          SDK="$HOME/.buildozer/android/platform/android-sdk"
 
-       mkdir -p "$SDK/licenses"
+          mkdir -p "$SDK/licenses"
 
-       echo "8933bad161af4178b1185d1a37fbf41ea5269c55" \
-        > "$SDK/licenses/android-sdk-license"
+          echo "8933bad161af4178b1185d1a37fbf41ea5269c55" > "$SDK/licenses/android-sdk-license"
+          echo "84831bc465f9d3bcfbb8c55f9d851f47" > "$SDK/licenses/android-sdk-preview-license"
 
-       echo "84831bc465f9d3bcfbb8c55f9d851f47" \
-        > "$SDK/licenses/android-sdk-preview-license"
+      - name: Install Android SDK components
+        run: |
+          export JAVA_HOME="/usr/lib/jvm/java-17-openjdk-amd64"
+          export PATH="$JAVA_HOME/bin:$PATH"
 
-    - name: Install Android SDK components
-      run: |
-       SDK="$HOME/.buildozer/android/platform/android-sdk"
+          SDK="$HOME/.buildozer/android/platform/android-sdk"
 
-       "$SDK/tools/bin/sdkmanager" \
-        --sdk_root="$SDK" \
-        "platform-tools" \
-        "platforms;android-33" \
-        "build-tools;33.0.2"
+          echo "===== Installation SDK ====="
 
-    - name: Verify Android SDK
-      run: |
-       SDK="$HOME/.buildozer/android/platform/android-sdk"
+          "$SDK/cmdline-tools/latest/bin/sdkmanager" \
+            --sdk_root="$SDK" \
+            "platform-tools" \
+            "platforms;android-33" \
+            "build-tools;33.0.2"
 
-       echo "===== sdkmanager ====="
-       "$SDK/tools/bin/sdkmanager" --version
+          echo "===== SDK components installés ====="
+          "$SDK/cmdline-tools/latest/bin/sdkmanager" \
+            --sdk_root="$SDK" \
+            --list_installed
 
-       echo "===== AIDL ====="
-       find "$SDK/build-tools" -name aidl -type f -print
+      - name: Verify Android SDK and AIDL
+        run: |
+          SDK="$HOME/.buildozer/android/platform/android-sdk"
 
-       echo "===== SDK ====="
-       ls -lah "$SDK"
+          echo "===== sdkmanager ====="
+          "$SDK/tools/bin/sdkmanager" --version
 
-    - name: Build APK
-      run: |
-       buildozer -v android debug
+          echo "===== Build Tools ====="
+          ls -lah "$SDK/build-tools"
 
-    - name: Check APK
-      if: success()
-      run: |
-       echo "APK généré :"
-       ls -lah bin/
-       find bin -maxdepth 1 -type f -name "*.apk" -print
+          echo "===== AIDL ====="
+          find "$SDK/build-tools" -name aidl -type f -print
 
-    - name: Upload APK
-      if: success()
-      uses: actions/upload-artifact@v4
-      with:
-       name: suivi-auto-apk
-       path: bin/*.apk
-       if-no-files-found: error
-       retention-days: 30
-      
+          echo "===== Platform ====="
+          ls -lah "$SDK/platforms/android-33"
+
+      - name: Build APK
+        run: |
+          buildozer -v android debug
+
+      - name: Check APK
+        if: success()
+        run: |
+          echo "===== APK généré ====="
+          ls -lah bin/
+          find bin -maxdepth 1 -type f -name "*.apk" -print
+
+      - name: Upload APK
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: suivi-auto-apk
+          path: bin/*.apk
+          if-no-files-found: error
+          retention-days: 30
+
