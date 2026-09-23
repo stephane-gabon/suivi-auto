@@ -10,28 +10,28 @@ on:
 jobs:
  build:
   runs-on: ubuntu-22.04
+  
+ steps:
+    - name: Checkout
+      uses: actions/checkout@v4
 
-  steps:
-   - name: Checkout
-     uses: actions/checkout@v4
+    - name: Install system dependencies
+      run: |
+       sudo apt-get update
+       sudo apt-get install -y python3-pip python3-setuptools python3-venv git zip unzip openjdk-17-jdk wget curl tar
+       java -version
+       python3 --version
 
-   - name: Install system dependencies
-     run: |
-      sudo apt-get update
-      sudo apt-get install -y python3-pip python3-setuptools python3-venv git zip unzip openjdk-17-jdk wget curl tar
-      java -version
-      python3 --version
+    - name: Install Buildozer and Cython
+      run: |
+       python3 -m pip install --upgrade pip setuptools wheel
+       python3 -m pip install --upgrade buildozer cython
+       buildozer --version
+       cython --version
 
-   - name: Install Buildozer and Cython
-     run: |
-      python3 -m pip install --upgrade pip setuptools wheel
-      python3 -m pip install --upgrade buildozer cython
-      buildozer --version
-      cython --version
-
-   - name: Cache Buildozer
-     uses: actions/cache@v4
-     with:
+    - name: Cache Buildozer
+      uses: actions/cache@v4
+      with:
       path: |
         ~/.buildozer
         ~/.gradle/caches
@@ -40,28 +40,101 @@ jobs:
       restore-keys: |
         buildozer-${{ runner.os }}-
 
-   - name: Configure Android SDK licenses
-     run: |
-      mkdir -p "$HOME/.buildozer/android/platform/android-sdk/licenses"
-      echo "8933bad161af4178b1185d1a37fbf41ea5269c55" > "$HOME/.buildozer/android/platform/android-sdk/licenses/android-sdk-license"
-      echo "84831bc465f9d3bcfbb8c55f9d851f47" > "$HOME/.buildozer/android/platform/android-sdk/licenses/android-sdk-preview-license"
+    - name: Install Android Command Line Tools
+      run: |
+       SDK="$HOME/.buildozer/android/platform/android-sdk"
 
-   - name: Build APK
-     run: |
-      buildozer -v android debug
+       mkdir -p "$SDK"
 
-   - name: Check APK
-     if: success()
-     run: |
-      echo "APK généré :"
-      ls -lah bin/
-      find bin -maxdepth 1 -type f -name "*.apk" -print
+       if [ ! -x "$SDK/cmdline-tools/latest/bin/sdkmanager" ]; then
+        echo "Installation des Android Command Line Tools..."
 
-   - name: Upload APK
-     if: success()
-     uses: actions/upload-artifact@v4
-     with:
+        rm -rf "$SDK/cmdline-tools"
+        mkdir -p "$SDK/cmdline-tools"
+
+        wget -q https://dl.google.com/android/repository/commandlinetools-linux-10406996_latest.zip \
+          -O /tmp/cmdline-tools.zip
+
+        unzip -q /tmp/cmdline-tools.zip -d "$SDK/cmdline-tools"
+
+        mkdir -p "$SDK/cmdline-tools/latest"
+
+        mv "$SDK/cmdline-tools/cmdline-tools/"* \
+          "$SDK/cmdline-tools/latest/"
+
+        rm -rf "$SDK/cmdline-tools/cmdline-tools"
+       fi
+
+       echo "Vérification du sdkmanager moderne..."
+       "$SDK/cmdline-tools/latest/bin/sdkmanager" --version
+
+       echo "Création du chemin attendu par Buildozer..."
+
+       mkdir -p "$SDK/tools/bin"
+
+       ln -sf \
+        "$SDK/cmdline-tools/latest/bin/sdkmanager" \
+        "$SDK/tools/bin/sdkmanager"
+
+       ln -sf \
+        "$SDK/cmdline-tools/latest/bin/avdmanager" \
+        "$SDK/tools/bin/avdmanager"
+
+       echo "sdkmanager final :"
+       ls -l "$SDK/tools/bin/sdkmanager"
+
+    - name: Configure Android SDK licenses
+      run: |
+       SDK="$HOME/.buildozer/android/platform/android-sdk"
+
+       mkdir -p "$SDK/licenses"
+
+       echo "8933bad161af4178b1185d1a37fbf41ea5269c55" \
+        > "$SDK/licenses/android-sdk-license"
+
+       echo "84831bc465f9d3bcfbb8c55f9d851f47" \
+        > "$SDK/licenses/android-sdk-preview-license"
+
+    - name: Install Android SDK components
+      run: |
+       SDK="$HOME/.buildozer/android/platform/android-sdk"
+
+       "$SDK/tools/bin/sdkmanager" \
+        --sdk_root="$SDK" \
+        "platform-tools" \
+        "platforms;android-33" \
+        "build-tools;33.0.2"
+
+    - name: Verify Android SDK
+      run: |
+       SDK="$HOME/.buildozer/android/platform/android-sdk"
+
+       echo "===== sdkmanager ====="
+       "$SDK/tools/bin/sdkmanager" --version
+
+       echo "===== AIDL ====="
+       find "$SDK/build-tools" -name aidl -type f -print
+
+       echo "===== SDK ====="
+       ls -lah "$SDK"
+
+    - name: Build APK
+      run: |
+       buildozer -v android debug
+
+    - name: Check APK
+      if: success()
+      run: |
+       echo "APK généré :"
+       ls -lah bin/
+       find bin -maxdepth 1 -type f -name "*.apk" -print
+
+    - name: Upload APK
+      if: success()
+      uses: actions/upload-artifact@v4
+      with:
       name: suivi-auto-apk
       path: bin/*.apk
-      if-no-files-found: error
-      retention-days: 30
+   if-no-files-found: error
+   retention-days: 30
+      
