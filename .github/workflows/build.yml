@@ -1,37 +1,37 @@
 name: Build Android APK
 
 on:
-push:
-branches:
-- main
-- master
-workflow_dispatch:
+ push:
+  branches:
+   - main
+   - master
+ workflow_dispatch:
 
 jobs:
-build:
-runs-on: ubuntu-22.04
+ build:
+  runs-on: ubuntu-22.04
 
-steps:
-  - name: Checkout
-    uses: actions/checkout@v4
+  steps:
+   - name: Checkout
+     uses: actions/checkout@v4
 
-  - name: Install system dependencies
-    run: |
+   - name: Install system dependencies
+     run: |
       sudo apt-get update
       sudo apt-get install -y python3-pip python3-setuptools python3-venv git zip unzip openjdk-17-jdk wget curl tar
       java -version
       python3 --version
 
-  - name: Install Buildozer and Cython
-    run: |
+   - name: Install Buildozer and Cython
+     run: |
       python3 -m pip install --upgrade pip setuptools wheel
       python3 -m pip install --upgrade buildozer cython
       buildozer --version
       cython --version
 
-  - name: Cache Buildozer
-    uses: actions/cache@v4
-    with:
+   - name: Cache Buildozer
+     uses: actions/cache@v4
+     with:
       path: |
         ~/.buildozer
         ~/.gradle/caches
@@ -40,27 +40,27 @@ steps:
       restore-keys: |
         buildozer-${{ runner.os }}-
 
-  - name: Configure Android SDK licenses
-    run: |
+   - name: Configure Android SDK licenses
+     run: |
       mkdir -p "$HOME/.buildozer/android/platform/android-sdk/licenses"
       echo "8933bad161af4178b1185d1a37fbf41ea5269c55" > "$HOME/.buildozer/android/platform/android-sdk/licenses/android-sdk-license"
       echo "84831bc465f9d3bcfbb8c55f9d851f47" > "$HOME/.buildozer/android/platform/android-sdk/licenses/android-sdk-preview-license"
 
-  - name: Build APK
-    run: |
+   - name: Build APK
+     run: |
       buildozer -v android debug
 
-  - name: Check APK
-    if: success()
-    run: |
+   - name: Check APK
+     if: success()
+     run: |
       echo "APK généré :"
       ls -lah bin/
       find bin -maxdepth 1 -type f -name "*.apk" -print
 
-  - name: Upload APK
-    if: success()
-    uses: actions/upload-artifact@v4
-    with:
+   - name: Upload APK
+     if: success()
+     uses: actions/upload-artifact@v4
+     with:
       name: suivi-auto-apk
       path: bin/*.apk
       if-no-files-found: error
