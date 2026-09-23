@@ -17,12 +17,6 @@ jobs:
           sudo apt install -y python3-pip python3-setuptools git zip unzip openjdk-17-jdk
           pip install buildozer cython
 
-      - name: Init buildozer
-        run: |
-          buildozer init
-          sed -i 's/^requirements =.*/requirements = python3,kivy,plyer,reportlab,openpyxl,pandas/' buildozer.spec
-          echo "android.permissions = CAMERA,READ_EXTERNAL_STORAGE,WRITE_EXTERNAL_STORAGE,POST_NOTIFICATIONS" >> buildozer.spec
-
       - name: Build APK
         run: |
           buildozer -v android debug
