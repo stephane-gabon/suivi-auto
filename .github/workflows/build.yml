@@ -13,70 +13,35 @@ runs-on: ubuntu-22.04
 
 ```
 steps:
-  # ---------------------------------------------------------
-  # 1. Récupérer le code
-  # ---------------------------------------------------------
   - name: Checkout
     uses: actions/checkout@v4
 
-  # ---------------------------------------------------------
-  # 2. Installer Python / Java / dépendances système
-  # ---------------------------------------------------------
   - name: Install system dependencies
     run: |
       sudo apt-get update
-
-      sudo apt-get install -y \
-        python3-pip \
-        python3-setuptools \
-        python3-venv \
-        git \
-        zip \
-        unzip \
-        openjdk-17-jdk \
-        wget \
-        curl \
-        tar
-
+      sudo apt-get install -y python3-pip python3-setuptools python3-venv git zip unzip openjdk-17-jdk wget curl tar
       java -version
       python3 --version
 
-  # ---------------------------------------------------------
-  # 3. Cache pip
-  # ---------------------------------------------------------
   - name: Get pip cache directory
     id: pip-cache
-    run: |
-      echo "dir=$(python3 -m pip cache dir)" >> "$GITHUB_OUTPUT"
+    run: echo "dir=$(python3 -m pip cache dir)" >> "$GITHUB_OUTPUT"
 
   - name: Cache pip
     uses: actions/cache@v4
     with:
       path: ${{ steps.pip-cache.outputs.dir }}
-      key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt', '**/buildozer.spec') }}
+      key: ${{ runner.os }}-pip-${{ hashFiles('**/buildozer.spec') }}
       restore-keys: |
         ${{ runner.os }}-pip-
 
-  # ---------------------------------------------------------
-  # 4. Installer Buildozer + Cython
-  # ---------------------------------------------------------
-  - name: Install Python dependencies
+  - name: Install Buildozer
     run: |
       python3 -m pip install --upgrade pip setuptools wheel
       python3 -m pip install --upgrade buildozer cython
-
       buildozer --version
       cython --version
 
-  # ---------------------------------------------------------
-  # 5. Cache Buildozer
-  #
-  # Contient notamment :
-  # - Android SDK
-  # - Android NDK
-  # - python-for-android
-  # - téléchargements et compilations intermédiaires
-  # ---------------------------------------------------------
   - name: Cache Buildozer
     uses: actions/cache@v4
     with:
@@ -88,54 +53,33 @@ steps:
       restore-keys: |
         ${{ runner.os }}-buildozer-api33-ndk25b-
 
-  # ---------------------------------------------------------
-  # 6. Préparer les licences Android
-  #
-  # Buildozer utilise son propre SDK sous ~/.buildozer
-  # ---------------------------------------------------------
   - name: Configure Android SDK licenses
     run: |
       mkdir -p "$HOME/.buildozer/android/platform/android-sdk/licenses"
+      echo "8933bad161af4178b1185d1a37fbf41ea5269c55" > "$HOME/.buildozer/android/platform/android-sdk/licenses/android-sdk-license"
+      echo "84831bc465f9d3bcfbb8c55f9d851f47" > "$HOME/.buildozer/android/platform/android-sdk/licenses/android-sdk-preview-license"
 
-      echo "8933bad161af4178b1185d1a37fbf41ea5269c55" \
-        > "$HOME/.buildozer/android/platform/android-sdk/licenses/android-sdk-license"
-
-      echo "84831bc465f9d3bcfbb8c55f9d851f47" \
-        > "$HOME/.buildozer/android/platform/android-sdk/licenses/android-sdk-preview-license"
-
-  # ---------------------------------------------------------
-  # 7. Vérifier la configuration Buildozer
-  # ---------------------------------------------------------
-  - name: Show Buildozer configuration
+  - name: Show configuration
     run: |
+      echo "===== Buildozer ====="
+      buildozer --version
+      echo "===== Java ====="
+      java -version
+      echo "===== Python ====="
+      python3 --version
       echo "===== buildozer.spec ====="
       cat buildozer.spec
 
-      echo "===== Environment ====="
-      java -version
-      python3 --version
-      buildozer --version
-
-  # ---------------------------------------------------------
-  # 8. Construire l'APK
-  # ---------------------------------------------------------
   - name: Build APK
-    run: |
-      buildozer -v android debug
+    run: buildozer -v android debug
 
-  # ---------------------------------------------------------
-  # 9. Vérifier l'APK généré
-  # ---------------------------------------------------------
   - name: List generated APK
     if: success()
     run: |
-      echo "===== Generated APK files ====="
+      echo "===== APK ====="
       ls -lah bin/
       find bin -maxdepth 1 -type f -name "*.apk" -print
 
-  # ---------------------------------------------------------
-  # 10. Sauvegarder l'APK comme artifact GitHub
-  # ---------------------------------------------------------
   - name: Upload APK artifact
     if: success()
     uses: actions/upload-artifact@v4
