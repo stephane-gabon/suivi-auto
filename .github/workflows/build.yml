@@ -19,7 +19,30 @@ jobs:
       run: |
        sudo apt-get update
        sudo apt-get install -y python3-pip python3-setuptools python3-venv git zip unzip openjdk-17-jdk wget curl tar
+
+       echo "===== Java installations ====="
+       ls -la /usr/lib/jvm/
+
+       echo "===== Configuration Java 17 ====="
+       JAVA17_HOME="/usr/lib/jvm/java-17-openjdk-amd64"
+
+       if [ ! -d "$JAVA17_HOME" ]; then
+         echo "ERREUR : Java 17 introuvable dans $JAVA17_HOME"
+         exit 1
+       fi
+
+       echo "JAVA_HOME=$JAVA17_HOME" >> "$GITHUB_ENV"
+       echo "$JAVA17_HOME/bin" >> "$GITHUB_PATH"
+
+       export JAVA_HOME="$JAVA17_HOME"
+       export PATH="$JAVA17_HOME/bin:$PATH"
+
+       echo "===== Java utilisé ====="
+       echo "JAVA_HOME=$JAVA_HOME"
+       which java
        java -version
+
+       echo "===== Python ====="
        python3 --version
 
     - name: Install Buildozer and Cython
