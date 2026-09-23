@@ -1,6 +1,6 @@
 name: Build Android APK
 
-on:
+'on':
 push:
 branches:
 - main
@@ -11,6 +11,7 @@ jobs:
 build:
 runs-on: ubuntu-22.04
 
+```
 steps:
   - name: Checkout
     uses: actions/checkout@v4
@@ -19,20 +20,6 @@ steps:
     run: |
       sudo apt-get update
       sudo apt-get install -y python3-pip python3-setuptools python3-venv git zip unzip openjdk-17-jdk wget curl tar
-      java -version
-      python3 --version
-
-  - name: Get pip cache directory
-    id: pip-cache
-    run: echo "dir=$(python3 -m pip cache dir)" >> "$GITHUB_OUTPUT"
-
-  - name: Cache pip
-    uses: actions/cache@v4
-    with:
-      path: ${{ steps.pip-cache.outputs.dir }}
-      key: ${{ runner.os }}-pip-${{ hashFiles('**/buildozer.spec') }}
-      restore-keys: |
-        ${{ runner.os }}-pip-
 
   - name: Install Buildozer
     run: |
@@ -48,9 +35,9 @@ steps:
         ~/.buildozer
         ~/.gradle/caches
         ~/.gradle/wrapper
-      key: ${{ runner.os }}-buildozer-api33-ndk25b-${{ hashFiles('buildozer.spec') }}
+      key: buildozer-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}
       restore-keys: |
-        ${{ runner.os }}-buildozer-api33-ndk25b-
+        buildozer-${{ runner.os }}-
 
   - name: Configure Android SDK licenses
     run: |
@@ -58,33 +45,20 @@ steps:
       echo "8933bad161af4178b1185d1a37fbf41ea5269c55" > "$HOME/.buildozer/android/platform/android-sdk/licenses/android-sdk-license"
       echo "84831bc465f9d3bcfbb8c55f9d851f47" > "$HOME/.buildozer/android/platform/android-sdk/licenses/android-sdk-preview-license"
 
-  - name: Show configuration
-    run: |
-      echo "===== Buildozer ====="
-      buildozer --version
-      echo "===== Java ====="
-      java -version
-      echo "===== Python ====="
-      python3 --version
-      echo "===== buildozer.spec ====="
-      cat buildozer.spec
-
   - name: Build APK
-    run: buildozer -v android debug
-
-  - name: List generated APK
-    if: success()
     run: |
-      echo "===== APK ====="
+      buildozer -v android debug
+
+  - name: Check APK
+    run: |
       ls -lah bin/
       find bin -maxdepth 1 -type f -name "*.apk" -print
 
-  - name: Upload APK artifact
-    if: success()
+  - name: Upload APK
     uses: actions/upload-artifact@v4
     with:
       name: suivi-auto-apk
       path: bin/*.apk
       if-no-files-found: error
       retention-days: 30
-      
+```
