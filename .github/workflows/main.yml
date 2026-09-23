@@ -1,0 +1,36 @@
+name: Build Kivy APK
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y python3-pip python3-setuptools git zip unzip openjdk-17-jdk
+          pip install buildozer cython
+
+      - name: Init buildozer
+        run: |
+          cd car_maintenance_app
+          buildozer init
+          sed -i 's/^requirements =.*/requirements = python3,kivy,plyer,reportlab,openpyxl,pandas/' buildozer.spec
+          echo "android.permissions = CAMERA,READ_EXTERNAL_STORAGE,WRITE_EXTERNAL_STORAGE,POST_NOTIFICATIONS" >> buildozer.spec
+
+      - name: Build APK
+        run: |
+          cd car_maintenance_app
+          buildozer -v android debug
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: car-maintenance-apk
+          path: car_maintenance_app/bin/*.apk
