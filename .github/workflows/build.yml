@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v4   # ✅ version compatible Node.js 24
+        uses: actions/checkout@v4   # ✅ Node.js 24 compatible
 
       - name: Install dependencies
         run: |
@@ -28,7 +28,7 @@ jobs:
           buildozer -v android debug
 
       - name: Upload APK artifact
-        uses: actions/upload-artifact@v4   # ✅ version compatible Node.js 24
+        uses: actions/upload-artifact@v4   # ✅ Node.js 24 compatible
         with:
           name: car-maintenance-apk
           path: bin/*.apk
