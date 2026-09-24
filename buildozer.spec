@@ -36,3 +36,5 @@ android.arch = arm64-v8a,armeabi-v7a
 
 android.accept_sdk_license = True
 android.enable_androidx = True
+
+p4a.local_recipes_dir = %(source.dir)s/recipes
