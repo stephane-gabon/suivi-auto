@@ -11,21 +11,21 @@ jobs:
     runs-on: ubuntu-22.04
 
     env:
-      # ------------------------------------------------------------
-      # Java
-      # ------------------------------------------------------------
+      # ============================================================
+      # JAVA
+      # ============================================================
       JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.20-1/x64
 
-      # ------------------------------------------------------------
-      # Android
-      # ------------------------------------------------------------
+      # ============================================================
+      # ANDROID
+      # ============================================================
       ANDROIDAPI: "33"
       ANDROIDMINAPI: "24"
 
       # NDK 28c
       ANDROID_NDK_VERSION: "28c"
 
-      # Empêche les installations interactives
+      # Empêche les installations interactives de p4a
       PYTHONFORANDROID_PREREQUISITES_INSTALL_INTERACTIVE: "0"
 
     steps:
@@ -38,7 +38,7 @@ jobs:
 
 
       # ============================================================
-      # 2. PYTHON
+      # 2. PYTHON 3.10
       # ============================================================
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -104,12 +104,15 @@ jobs:
             "buildozer==1.6.0" \
             "cython==0.29.34"
 
-          echo "===== Buildozer ====="
+          echo "======================================"
+          echo "BUILDOZER"
+          echo "======================================"
+
           buildozer --version
 
 
       # ============================================================
-      # 6. VARIABLES ANDROID
+      # 6. CONFIGURATION ENVIRONNEMENT ANDROID
       # ============================================================
       - name: Configure Android environment
         shell: bash
@@ -130,8 +133,10 @@ jobs:
           echo "ANDROID_NDK_HOME=$NDK" >> "$GITHUB_ENV"
           echo "ANDROID_NDK_ROOT=$NDK" >> "$GITHUB_ENV"
 
+          echo "ANDROIDAPI=33" >> "$GITHUB_ENV"
+          echo "ANDROIDMINAPI=24" >> "$GITHUB_ENV"
+
           echo "$SDK/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
-          echo "$SDK/tools/bin" >> "$GITHUB_PATH"
           echo "$SDK/platform-tools" >> "$GITHUB_PATH"
           echo "$SDK/build-tools/35.0.0" >> "$GITHUB_PATH"
 
@@ -164,6 +169,10 @@ jobs:
           mkdir -p "$SDK"
           mkdir -p "$TEMP"
 
+          echo "======================================"
+          echo "TELECHARGEMENT COMMAND LINE TOOLS"
+          echo "======================================"
+
           wget \
             --retry-connrefused \
             --waitretry=5 \
@@ -171,6 +180,12 @@ jobs:
             --tries=5 \
             "https://dl.google.com/android/repository/commandlinetools-linux-14742923_latest.zip" \
             -O "$TEMP/cmdline-tools.zip"
+
+          test -s "$TEMP/cmdline-tools.zip"
+
+          echo "======================================"
+          echo "EXTRACTION"
+          echo "======================================"
 
           unzip -q \
             "$TEMP/cmdline-tools.zip" \
@@ -194,8 +209,10 @@ jobs:
           test -x "$SDKMANAGER"
 
           echo "======================================"
-          echo "SDKMANAGER MODERNE"
+          echo "SDKMANAGER"
           echo "======================================"
+
+          ls -lh "$SDKMANAGER"
 
           "$SDKMANAGER" --version
 
@@ -218,11 +235,11 @@ jobs:
             --sdk_root="$SDK" \
             --licenses >/dev/null || true
 
-          echo "Licences Android configurées."
+          echo "Licences Android configurees."
 
 
       # ============================================================
-      # 10. INSTALLER SDK
+      # 10. INSTALLATION SDK
       # ============================================================
       - name: Install Android SDK packages
         shell: bash
@@ -232,6 +249,10 @@ jobs:
           SDK="$HOME/.buildozer/android/platform/android-sdk"
           SDKMANAGER="$SDK/cmdline-tools/latest/bin/sdkmanager"
 
+          echo "======================================"
+          echo "INSTALLATION SDK"
+          echo "======================================"
+
           "$SDKMANAGER" \
             --sdk_root="$SDK" \
             "platform-tools" \
@@ -239,22 +260,24 @@ jobs:
             "build-tools;35.0.0"
 
           echo "======================================"
-          echo "SDK INSTALLE"
+          echo "VERIFICATION SDK"
           echo "======================================"
 
           test -d "$SDK/platforms/android-33"
           test -d "$SDK/build-tools/35.0.0"
           test -x "$SDK/build-tools/35.0.0/aidl"
 
+          echo "SDK OK"
+
+          echo "Build tools :"
           ls -la "$SDK/build-tools"
 
-          echo "AIDL:"
+          echo "AIDL :"
           "$SDK/build-tools/35.0.0/aidl" --version || true
 
 
-
       # ============================================================
-      # 11. INSTALLER NDK 28c
+      # 11. INSTALLATION NDK 28c
       # ============================================================
       - name: Install Android NDK 28c
         shell: bash
@@ -288,11 +311,11 @@ jobs:
           grep -q "Pkg.ReleaseName = r28c" \
             "$NDK/source.properties"
 
-          echo "NDK 28c correctement installé."
+          echo "NDK 28c correctement installe."
 
 
       # ============================================================
-      # 12. CONFIGURATION NDK FINALE
+      # 12. CONFIGURATION ANDROID FINALE
       # ============================================================
       - name: Configure final Android environment
         shell: bash
@@ -329,7 +352,7 @@ jobs:
 
 
       # ============================================================
-      # 13. VERIFICATION COMPLETE ANDROID
+      # 13. VERIFICATION ANDROID
       # ============================================================
       - name: Verify Android environment
         shell: bash
@@ -365,11 +388,8 @@ jobs:
           test -f "$SDKMANAGER"
           test -x "$SDKMANAGER"
 
-          echo "sdkmanager:"
           ls -l "$SDKMANAGER"
-          file "$SDKMANAGER"
 
-          echo "sdkmanager version:"
           "$SDKMANAGER" --version
 
           echo "======================================"
@@ -407,18 +427,12 @@ jobs:
           echo "ANDROIDMINAPI=$ANDROIDMINAPI"
 
           echo "======================================"
-          echo "PATH"
-          echo "======================================"
-
-          echo "$PATH"
-
-          echo "======================================"
           echo "COMMANDS"
           echo "======================================"
 
-          command -v java || true
-          command -v sdkmanager || true
-          command -v aidl || true
+          command -v java
+          command -v sdkmanager
+          command -v aidl
 
           echo "======================================"
           echo "ANDROID VERIFICATION OK"
@@ -426,7 +440,7 @@ jobs:
 
 
       # ============================================================
-      # 14. VERIFIER LE RECIPE REPORTLAB
+      # 14. VERIFICATION RECIPE REPORTLAB
       # ============================================================
       - name: Verify ReportLab recipe
         shell: bash
@@ -439,7 +453,7 @@ jobs:
 
           test -f recipes/reportlab/__init__.py
 
-          echo "Recipe trouvé :"
+          echo "Recipe trouve :"
           ls -lh recipes/reportlab/__init__.py
 
           echo
@@ -448,7 +462,7 @@ jobs:
 
 
       # ============================================================
-      # 15. VERIFIER LE PROJET
+      # 15. VERIFICATION PROJET
       # ============================================================
       - name: Verify project files
         shell: bash
@@ -476,38 +490,51 @@ jobs:
 
           grep '^requirements' buildozer.spec || true
 
+          echo
+          echo "Recipe ReportLab :"
+
+          test -d recipes/reportlab
+          test -f recipes/reportlab/__init__.py
+
+          echo "recipes/reportlab OK"
+
 
       # ============================================================
-      # 16. INITIALISATION BUILDOZER / P4A
+      # 16. VERIFICATION BUILDOZER SANS LANCER P4A
       # ============================================================
-      - name: Initialize Buildozer
+      - name: Verify Buildozer
         shell: bash
         run: |
           set -euxo pipefail
+
+          echo "======================================"
+          echo "BUILDOZER"
+          echo "======================================"
 
           buildozer --version
 
           python -m pip show buildozer
 
-          echo "======================================"
-          echo "P4A"
-          echo "======================================"
-
-          buildozer android p4a -- --help
+          echo
+          echo "Buildozer OK."
 
 
       # ============================================================
-      # 17. NETTOYAGE BUILD ANDROID
+      # 17. NETTOYAGE DES ANCIENS BUILDS
       # ============================================================
       - name: Clean Android build
         shell: bash
         run: |
           set -euxo pipefail
 
+          echo "======================================"
+          echo "NETTOYAGE"
+          echo "======================================"
+
           rm -rf .buildozer/android/platform/build-*
           rm -rf .buildozer/android/platform/dists
 
-          echo "Anciens builds Android supprimés."
+          echo "Anciens builds Android supprimes."
 
 
       # ============================================================
@@ -548,22 +575,41 @@ jobs:
           buildozer --version
 
           echo
+          echo "SDK:"
+          test -d "$SDK/platforms/android-33"
+          test -d "$SDK/build-tools/35.0.0"
+
+          echo
           echo "NDK:"
           grep -E 'Pkg.Revision|Pkg.ReleaseName' \
             "$NDK/source.properties"
 
           echo
           echo "AIDL:"
-          "$SDK/build-tools/35.0.0/aidl" --version
+          "$SDK/build-tools/35.0.0/aidl" --version || true
+
+          echo
+          echo "Recipe ReportLab:"
+          test -f recipes/reportlab/__init__.py
+          echo "OK"
+
+          echo
+          echo "Architecture:"
+          grep -E '^android\.archs' buildozer.spec || true
+
+          echo
+          echo "Requirements:"
+          grep '^requirements' buildozer.spec || true
 
           echo
           echo "Lancement Buildozer..."
+          echo
 
           buildozer -v android debug
 
 
       # ============================================================
-      # 19. VERIFIER APK
+      # 19. VERIFICATION APK
       # ============================================================
       - name: Check APK
         shell: bash
@@ -576,10 +622,16 @@ jobs:
 
           mkdir -p bin
 
+          echo "Contenu de bin :"
+          ls -lah bin || true
+
+          echo
+          echo "Recherche APK :"
+
           find bin \
             -maxdepth 1 \
             -type f \
-            \( -name "*.apk" -o -name "*.aab" \) \
+            -name "*.apk" \
             -print
 
           APK="$(find bin \
@@ -590,11 +642,19 @@ jobs:
 
           if [ -z "$APK" ]; then
             echo "ERREUR : aucun APK produit."
+            echo
+            echo "Recherche dans tout le projet :"
+
+            find . \
+              -type f \
+              -name "*.apk" \
+              -print
+
             exit 1
           fi
 
           echo
-          echo "APK trouvé :"
+          echo "APK trouve :"
           echo "$APK"
 
           echo
