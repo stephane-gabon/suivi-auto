@@ -1,15 +1,3 @@
-- name: Show python-for-android version
-  run: |
-   cd .buildozer/android/platform/python-for-android
-
-   echo "===== Python-for-Android ====="
-
-   git rev-parse HEAD || true
-
-   git describe --tags --always || true
-
-   git log -1 --oneline || true
-   
 name: Build Android APK
 
 on:
