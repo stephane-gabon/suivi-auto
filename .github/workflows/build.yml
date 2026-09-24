@@ -3,8 +3,8 @@ name: Build Android APK
 on:
   push:
     branches:
-      - main
-  workflow_dispatch:
+    - main
+    workflow_dispatch:
 
 jobs:
   build:
@@ -14,26 +14,37 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install dependencies
+      - name: Install system dependencies
         run: |
-          sudo apt update
-          sudo apt install -y python3-pip python3-setuptools git zip unzip openjdk-17-jdk wget tar curl
-
-          python3 -m pip install --upgrade pip
-          python3 -m pip install --upgrade buildozer cython
+          sudo apt-get update
+          sudo apt-get install -y \
+            python3-pip \
+            python3-setuptools \
+            python3-venv \
+            git \
+            zip \
+            unzip \
+            openjdk-17-jdk \
+            wget \
+            curl \
+            tar \
+            autoconf \
+            automake \
+            libtool \
+            pkg-config
 
       - name: Configure Java 17
         run: |
-          JAVA_HOME="/usr/lib/jvm/java-17-openjdk-amd64"
+          echo "JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64" >> "$GITHUB_ENV"
+          echo "/usr/lib/jvm/java-17-openjdk-amd64/bin" >> "$GITHUB_PATH"
 
-          echo "JAVA_HOME=$JAVA_HOME" >> "$GITHUB_ENV"
-          echo "$JAVA_HOME/bin" >> "$GITHUB_PATH"
-
-          export JAVA_HOME="$JAVA_HOME"
-          export PATH="$JAVA_HOME/bin:$PATH"
-
-          echo "===== JAVA ====="
+          export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
           java -version
+
+      - name: Install Buildozer
+        run: |
+          python3 -m pip install --upgrade pip setuptools wheel
+          python3 -m pip install --upgrade buildozer==1.6.0 cython
 
       - name: Cache Buildozer
         uses: actions/cache@v4
@@ -45,194 +56,166 @@ jobs:
           restore-keys: |
             buildozer-${{ runner.os }}-
 
-      - name: Install Android SDK
-        env:
-          JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
+      - name: Prepare Android SDK
+        shell: bash
         run: |
+          set -e
+
           SDK="$HOME/.buildozer/android/platform/android-sdk"
-
-          export JAVA_HOME="/usr/lib/jvm/java-17-openjdk-amd64"
-          export PATH="$JAVA_HOME/bin:$PATH"
-
-          echo "===== JAVA ====="
-          java -version
-
-          mkdir -p "$SDK/cmdline-tools"
-
-          wget -q \
-            https://dl.google.com/android/repository/commandlinetools-linux-10406996_latest.zip \
-            -O /tmp/cmdline-tools.zip
-
-          rm -rf "$SDK/cmdline-tools/latest"
-          rm -rf "$SDK/cmdline-tools/cmdline-tools"
-
-          unzip -q /tmp/cmdline-tools.zip -d "$SDK/cmdline-tools"
-
-          mkdir -p "$SDK/cmdline-tools/latest"
-
-          cp -r \
-            "$SDK/cmdline-tools/cmdline-tools/"* \
-            "$SDK/cmdline-tools/latest/"
-
-          rm -rf "$SDK/cmdline-tools/cmdline-tools"
-
-          echo "===== SDKMANAGER MODERNE ====="
-
-          export PATH="$JAVA_HOME/bin:$SDK/cmdline-tools/latest/bin:$SDK/platform-tools:$PATH"
-
-          which sdkmanager
-          sdkmanager --version
-
-          echo "===== COMPATIBILITE BUILDOZER ====="
-
-          mkdir -p "$SDK/tools/bin"
-
-          ln -sf \
-            "$SDK/cmdline-tools/latest/bin/sdkmanager" \
-            "$SDK/tools/bin/sdkmanager"
-
-          ln -sf \
-            "$SDK/cmdline-tools/latest/bin/avdmanager" \
-            "$SDK/tools/bin/avdmanager"
-
-          echo "sdkmanager attendu par Buildozer :"
-          ls -l "$SDK/tools/bin/sdkmanager"
-
-          echo "===== TEST SDKMANAGER BUILDOZER ====="
-
-          "$SDK/tools/bin/sdkmanager" --version
-
-          echo "===== VARIABLES ANDROID ====="
+          CMDLINE="$RUNNER_TEMP/cmdline-tools"
 
           echo "ANDROIDSDK=$SDK" >> "$GITHUB_ENV"
           echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
 
+          mkdir -p "$SDK/cmdline-tools"
+          mkdir -p "$CMDLINE"
+
+          echo "Téléchargement Android Command Line Tools..."
+
+          wget -q \
+            "https://dl.google.com/android/repository/commandlinetools-linux-10406996_latest.zip" \
+            -O "$RUNNER_TEMP/cmdline-tools.zip"
+
+          unzip -q "$RUNNER_TEMP/cmdline-tools.zip" -d "$CMDLINE"
+
+          rm -rf "$SDK/cmdline-tools/latest"
+          mkdir -p "$SDK/cmdline-tools/latest"
+
+          cp -R "$CMDLINE/cmdline-tools/." \
+            "$SDK/cmdline-tools/latest/"
+
           echo "$SDK/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
-          echo "$SDK/tools/bin" >> "$GITHUB_PATH"
           echo "$SDK/platform-tools" >> "$GITHUB_PATH"
 
-          yes | "$SDK/tools/bin/sdkmanager" --licenses >/dev/null || true
+          export PATH="$SDK/cmdline-tools/latest/bin:$SDK/platform-tools:$PATH"
 
-          "$SDK/tools/bin/sdkmanager" \
+          echo "===== sdkmanager ====="
+          sdkmanager --version
+
+          echo "===== Acceptation des licences ====="
+
+          yes | sdkmanager --licenses >/dev/null 2>&1 || true
+
+          echo "===== Installation SDK ====="
+
+          sdkmanager \
             "platform-tools" \
             "platforms;android-33" \
             "build-tools;33.0.2"
 
-      - name: Install Android NDK
-        env:
-          JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
-        run: |
-          SDK="$HOME/.buildozer/android/platform/android-sdk"
+          echo "===== Vérification SDK ====="
 
-          export JAVA_HOME="/usr/lib/jvm/java-17-openjdk-amd64"
-          export PATH="$JAVA_HOME/bin:$SDK/tools/bin:$SDK/cmdline-tools/latest/bin:$SDK/platform-tools:$PATH"
+          test -d "$SDK/platforms/android-33"
+          test -d "$SDK/build-tools/33.0.2"
+          test -x "$SDK/build-tools/33.0.2/aidl"
 
-          echo "===== JAVA ====="
-          java -version
-
-          echo "===== SDKMANAGER ====="
-          "$SDK/tools/bin/sdkmanager" --version
-
-          yes | "$SDK/tools/bin/sdkmanager" --licenses >/dev/null || true
-
-          "$SDK/tools/bin/sdkmanager" "ndk;28.0.13004108"
-
-          echo "ANDROID_NDK_HOME=$SDK/ndk/28.0.13004108" >> "$GITHUB_ENV"
-
-      - name: Show build versions
-        run: |
-          python --version
-          pip show buildozer
-          python -m pythonforandroid.toolchain --version || true
-          python -c "import pythonforandroid; print(pythonforandroid.__version__)"
- 
-      - name: Verify Android SDK
-        env:
-          JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
-        run: |
-          SDK="$HOME/.buildozer/android/platform/android-sdk"
-
-          export JAVA_HOME="/usr/lib/jvm/java-17-openjdk-amd64"
-          export PATH="$JAVA_HOME/bin:$SDK/tools/bin:$SDK/cmdline-tools/latest/bin:$SDK/platform-tools:$PATH"
-
-          echo "===== JAVA ====="
-          java -version
-
-          echo "===== SDKMANAGER ====="
-          "$SDK/tools/bin/sdkmanager" --version
-
-          echo "===== BUILD TOOLS ====="
-          ls -la "$SDK/build-tools"
-
-          echo "===== AIDL ====="
-
-          if [ ! -f "$SDK/build-tools/33.0.2/aidl" ]; then
-            echo "ERREUR : AIDL introuvable"
-            exit 1
-          fi
-
-          if [ ! -x "$SDK/build-tools/33.0.2/aidl" ]; then
-            echo "ERREUR : AIDL n'est pas exécutable"
-            exit 1
-          fi
-
-          echo "AIDL trouvé :"
-          ls -lh "$SDK/build-tools/33.0.2/aidl"
-
+          echo "SDK OK"
           echo "AIDL OK"
 
-          echo "===== PLATFORM ANDROID 33 ====="
+      - name: Prepare python-for-android
+        shell: bash
+        run: |
+          set -e
 
-          if [ ! -d "$SDK/platforms/android-33" ]; then
-            echo "ERREUR : Android Platform 33 introuvable"
-            exit 1
-          fi
+          echo "Installation de python-for-android..."
 
-          echo "Android Platform 33 OK"
+          python3 -m pip install --upgrade \
+            python-for-android
 
-          echo "===== NDK ====="
+          echo "===== python-for-android ====="
 
-          if [ ! -d "$SDK/ndk/28.0.13004108" ]; then
-            echo "ERREUR : NDK introuvable"
-            exit 1
-          fi
+          python3 -c "
+          import pythonforandroid
+          print('python-for-android:', getattr(pythonforandroid, '__version__', 'unknown'))
+          "
 
-          echo "NDK 28 OK"
+      - name: Verify Android environment
+        shell: bash
+        run: |
+          set -e
+
+          SDK="$HOME/.buildozer/android/platform/android-sdk"
+
+          echo "===== Java ====="
+          java -version
+
+          echo "===== SDK ====="
+          echo "$SDK"
+
+          echo "===== Platform ====="
+          ls -la "$SDK/platforms/android-33"
+
+          echo "===== Build Tools ====="
+          ls -la "$SDK/build-tools/33.0.2"
+
+          echo "===== AIDL ====="
+          "$SDK/build-tools/33.0.2/aidl" --version || true
+
+      - name: Verify ReportLab source
+        shell: bash
+        run: |
+          set -e
+
+          echo "===== Test ReportLab PyPI ====="
+
+          python3 -m pip download \
+            --no-deps \
+            --only-binary=:all: \
+            reportlab \
+            -d "$RUNNER_TEMP/reportlab-test" || true
+
+          ls -la "$RUNNER_TEMP/reportlab-test" || true
+
+      - name: Clean previous Android build
+        shell: bash
+        run: |
+          set -e
+
+          rm -rf .buildozer/android/platform/build-*
+          rm -rf .buildozer/android/platform/dists
 
       - name: Build APK
+        shell: bash
         env:
           JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
         run: |
-          SDK="$HOME/.buildozer/android/platform/android-sdk"
+          set -e
 
-          export JAVA_HOME="/usr/lib/jvm/java-17-openjdk-amd64"
-          export ANDROIDSDK="$SDK"
-          export ANDROID_HOME="$SDK"
-          export PATH="$JAVA_HOME/bin:$SDK/tools/bin:$SDK/cmdline-tools/latest/bin:$SDK/platform-tools:$PATH"
+          export ANDROIDSDK="$HOME/.buildozer/android/platform/android-sdk"
+          export ANDROID_HOME="$ANDROIDSDK"
 
-          echo "===== JAVA AVANT BUILDOZER ====="
+          export PATH="$ANDROIDSDK/cmdline-tools/latest/bin:$ANDROIDSDK/platform-tools:$PATH"
+
+          echo "===== Environment ====="
+          echo "ANDROIDSDK=$ANDROIDSDK"
+          echo "ANDROIDAPI=${ANDROIDAPI:-33}"
+          echo "ANDROIDMINAPI=${ANDROIDMINAPI:-24}"
           java -version
 
-          echo "===== SDKMANAGER ====="
-          "$SDK/tools/bin/sdkmanager" --version
+          echo "===== Buildozer ====="
+          buildozer --version
 
-          echo "===== BUILDOZER ====="
+          echo "===== Build ====="
+
           buildozer -v android debug
 
       - name: Check APK
+        shell: bash
         run: |
-          echo "===== APK GENERE ====="
+          set -e
 
-          find bin -type f -name "*.apk" -print
+          echo "===== APK généré ====="
 
-          if ! find bin -type f -name "*.apk" | grep -q .; then
-            echo "ERREUR : aucun APK généré"
-            exit 1
-          fi
+          find bin -maxdepth 1 -type f \
+            \( -name "*.apk" -o -name "*.aab" \) \
+            -print
+
+          test -n "$(find bin -maxdepth 1 -name '*.apk' -print -quit)"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: car-maintenance-apk
+          name: suivi-auto-apk
           path: bin/*.apk
+          if-no-files-found: error
 
