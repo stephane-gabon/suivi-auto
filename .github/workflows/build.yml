@@ -4,7 +4,7 @@ on:
   push:
     branches:
     - main
-    workflow_dispatch:
+  workflow_dispatch:
 
 jobs:
   build:
@@ -67,7 +67,7 @@ jobs:
           echo "ANDROIDSDK=$SDK" >> "$GITHUB_ENV"
           echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
 
-          mkdir -p "$SDK/cmdline-tools"
+          mkdir -p "$SDK"
           mkdir -p "$CMDLINE"
 
           echo "Téléchargement Android Command Line Tools..."
@@ -78,38 +78,55 @@ jobs:
 
           unzip -q "$RUNNER_TEMP/cmdline-tools.zip" -d "$CMDLINE"
 
-          rm -rf "$SDK/cmdline-tools/latest"
+          rm -rf "$SDK/cmdline-tools"
           mkdir -p "$SDK/cmdline-tools/latest"
 
-          cp -R "$CMDLINE/cmdline-tools/." \
+          cp -R \
+            "$CMDLINE/cmdline-tools/." \
             "$SDK/cmdline-tools/latest/"
 
+          echo "Création de l'ancien chemin attendu par Buildozer..."
+
+          mkdir -p "$SDK/tools/bin"
+
+          ln -sf \
+            "$SDK/cmdline-tools/latest/bin/sdkmanager" \
+            "$SDK/tools/bin/sdkmanager"
+
+          ln -sf \
+            "$SDK/cmdline-tools/latest/bin/avdmanager" \
+            "$SDK/tools/bin/avdmanager"
+
+          echo "$SDK/tools/bin" >> "$GITHUB_PATH"
           echo "$SDK/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
           echo "$SDK/platform-tools" >> "$GITHUB_PATH"
 
-          export PATH="$SDK/cmdline-tools/latest/bin:$SDK/platform-tools:$PATH"
+          export PATH="$SDK/tools/bin:$SDK/cmdline-tools/latest/bin:$SDK/platform-tools:$PATH"
 
           echo "===== sdkmanager ====="
-          sdkmanager --version
+          "$SDK/tools/bin/sdkmanager" --version
 
-          echo "===== Acceptation des licences ====="
+          echo "===== Acceptation licences ====="
 
-          yes | sdkmanager --licenses >/dev/null 2>&1 || true
+          yes | "$SDK/tools/bin/sdkmanager" --licenses \
+            >/dev/null 2>&1 || true
 
           echo "===== Installation SDK ====="
 
-          sdkmanager \
+          "$SDK/tools/bin/sdkmanager" \
             "platform-tools" \
             "platforms;android-33" \
             "build-tools;33.0.2"
 
-          echo "===== Vérification SDK ====="
+          echo "===== Vérification ====="
 
+          test -x "$SDK/tools/bin/sdkmanager"
           test -d "$SDK/platforms/android-33"
           test -d "$SDK/build-tools/33.0.2"
           test -x "$SDK/build-tools/33.0.2/aidl"
 
           echo "SDK OK"
+          echo "sdkmanager OK"
           echo "AIDL OK"
 
       - name: Prepare python-for-android
