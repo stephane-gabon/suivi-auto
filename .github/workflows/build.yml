@@ -12,7 +12,7 @@ jobs:
 
     env:
       ANDROID_API: "33"
-      ANDROID_BUILD_TOOLS: "35.0.0"
+      ANDROID_BUILD_TOOLS: "34.0.0"
       ANDROID_NDK: "28c"
 
     steps:
@@ -153,11 +153,24 @@ jobs:
           SDK="$HOME/.buildozer/android/platform/android-sdk"
           SDKMANAGER="$SDK/cmdline-tools/latest/bin/sdkmanager"
 
+          echo "Installing Android SDK packages..."
+
           "$SDKMANAGER" \
             --sdk_root="$SDK" \
             "platform-tools" \
             "platforms;android-${ANDROID_API}" \
             "build-tools;${ANDROID_BUILD_TOOLS}"
+
+          echo
+          echo "=== Installed Build Tools ==="
+
+          ls -lah "$SDK/build-tools/" || true
+
+          echo
+          echo "=== Build Tools ${ANDROID_BUILD_TOOLS} ==="
+
+          ls -lah \
+            "$SDK/build-tools/${ANDROID_BUILD_TOOLS}/" || true
 
       # ============================================================
       # 10. Verify Android SDK
@@ -172,18 +185,35 @@ jobs:
           echo "ANDROID_HOME=$ANDROID_HOME"
           echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
 
+          echo
+          echo "=== adb ==="
+
           test -x "$SDK/platform-tools/adb"
 
-          test -x \
-            "$SDK/build-tools/${ANDROID_BUILD_TOOLS}/aapt"
-
-          echo
-          echo "adb:"
           "$SDK/platform-tools/adb" version
 
           echo
-          echo "aapt:"
-          "$SDK/build-tools/${ANDROID_BUILD_TOOLS}/aapt version"
+          echo "=== Build Tools ==="
+
+          test -d \
+            "$SDK/build-tools/${ANDROID_BUILD_TOOLS}"
+
+          ls -lah \
+            "$SDK/build-tools/${ANDROID_BUILD_TOOLS}/"
+
+          echo
+          echo "=== aapt/aapt2 ==="
+
+          if [ -x "$SDK/build-tools/${ANDROID_BUILD_TOOLS}/aapt" ]; then
+            echo "aapt found:"
+            "$SDK/build-tools/${ANDROID_BUILD_TOOLS}/aapt version"
+          elif [ -x "$SDK/build-tools/${ANDROID_BUILD_TOOLS}/aapt2" ]; then
+            echo "aapt2 found:"
+            "$SDK/build-tools/${ANDROID_BUILD_TOOLS}/aapt2 version"
+          else
+            echo "ERROR: Neither aapt nor aapt2 was found."
+            exit 1
+          fi
 
       # ============================================================
       # 11. Clean all previous Buildozer state
