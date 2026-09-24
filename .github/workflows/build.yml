@@ -268,27 +268,35 @@ jobs:
           test -f buildozer.spec
 
           echo ""
-          echo "p4a.local_recipes configuration:"
-          grep -n \
-            "p4a.local_recipes" \
-            buildozer.spec \
-            || true
+          echo "Local recipes configuration:"
+          grep -nE 'p4a\.local_recipes(_dir)?[[:space:]]*=' buildozer.spec || true
 
-          if ! grep -Eq \
+          if grep -Eq \
+            '^[[:space:]]*p4a\.local_recipes_dir[[:space:]]*=[[:space:]]*p4a-recipes' \
+            buildozer.spec
+          then
+            echo ""
+            echo "OK: p4a.local_recipes_dir = p4a-recipes"
+            exit 0
+          fi
+
+          if grep -Eq \
             '^[[:space:]]*p4a\.local_recipes[[:space:]]*=[[:space:]]*p4a-recipes' \
             buildozer.spec
           then
             echo ""
-            echo "ERREUR :"
-            echo "buildozer.spec doit contenir :"
-            echo ""
-            echo "p4a.local_recipes = p4a-recipes"
-            echo ""
-            exit 1
+            echo "OK: p4a.local_recipes = p4a-recipes"
+            exit 0
           fi
 
           echo ""
-          echo "Local p4a recipes correctly configured."
+          echo "ERREUR : aucune configuration locale p4a-recipes trouvée."
+          echo ""
+          echo "Le buildozer.spec doit contenir :"
+          echo ""
+          echo "p4a.local_recipes_dir = p4a-recipes"
+          echo ""
+          exit 1
 
       # ============================================================
       # 13. PREPARE LOCAL REPORTLAB SOURCE
