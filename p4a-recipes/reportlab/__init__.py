@@ -21,5 +21,5 @@ class ReportLabRecipe(PythonRecipe):
     site_packages_name = "reportlab"
 
 
-recipe = ReportLabRecipe()
+    recipe = ReportLabRecipe()
 
