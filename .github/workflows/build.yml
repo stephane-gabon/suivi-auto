@@ -139,6 +139,13 @@ jobs:
 
           echo "ANDROID_NDK_HOME=$SDK/ndk/28.0.13004108" >> "$GITHUB_ENV"
 
+      - name: Show build versions
+        run: |
+          python --version
+          pip show buildozer
+          python -m pythonforandroid.toolchain --version || true
+          python -c "import pythonforandroid; print(pythonforandroid.__version__)"
+ 
       - name: Verify Android SDK
         env:
           JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
