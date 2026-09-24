@@ -3,7 +3,7 @@ name: Build Android APK
 on:
   push:
     branches:
-    - main
+      - main
   workflow_dispatch:
 
 jobs:
@@ -11,28 +11,13 @@ jobs:
     runs-on: ubuntu-22.04
 
     steps:
-
-      # ============================================================
-      # CHECKOUT
-      # ============================================================
-
       - name: Checkout
         uses: actions/checkout@v4
 
-
-      # ============================================================
-      # DEPENDANCES SYSTEME
-      # ============================================================
-
       - name: Install system dependencies
-        shell: bash
         run: |
-          set -e
-
           sudo apt-get update
-
           sudo apt-get install -y \
-            python3 \
             python3-pip \
             python3-setuptools \
             python3-venv \
@@ -46,54 +31,27 @@ jobs:
             automake \
             libtool \
             pkg-config \
-            build-essential \
-            ccache \
+            libfreetype6-dev \
             openjdk-17-jdk
 
-
-      # ============================================================
-      # JAVA 17
-      # ============================================================
-
       - name: Configure Java 17
-        shell: bash
         run: |
-          set -e
-
           echo "JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64" >> "$GITHUB_ENV"
           echo "/usr/lib/jvm/java-17-openjdk-amd64/bin" >> "$GITHUB_PATH"
 
           export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
 
-          echo "===== JAVA ====="
           java -version
 
-
-      # ============================================================
-      # PYTHON / BUILDOZER
-      # ============================================================
-
       - name: Install Buildozer
-        shell: bash
         run: |
-          set -e
-
-          python3 -m pip install --upgrade \
-            pip \
-            setuptools \
-            wheel
+          python3 -m pip install --upgrade pip setuptools wheel
 
           python3 -m pip install \
             buildozer==1.6.0 \
-            cython==0.29.36
+            cython
 
-          echo "===== BUILDOZER ====="
           buildozer --version
-
-
-      # ============================================================
-      # ANDROID SDK
-      # ============================================================
 
       - name: Prepare Android SDK
         shell: bash
@@ -105,11 +63,10 @@ jobs:
 
           echo "ANDROIDSDK=$SDK" >> "$GITHUB_ENV"
           echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
 
           mkdir -p "$SDK"
           mkdir -p "$CMDLINE"
-
-          echo "===== DOWNLOAD ANDROID COMMAND LINE TOOLS ====="
 
           wget -q \
             "https://dl.google.com/android/repository/commandlinetools-linux-10406996_latest.zip" \
@@ -127,8 +84,6 @@ jobs:
             "$CMDLINE/cmdline-tools/." \
             "$SDK/cmdline-tools/latest/"
 
-          # Ancien chemin attendu par certaines versions
-          # de Buildozer / python-for-android.
           mkdir -p "$SDK/tools/bin"
 
           ln -sf \
@@ -139,164 +94,55 @@ jobs:
             "$SDK/cmdline-tools/latest/bin/avdmanager" \
             "$SDK/tools/bin/avdmanager"
 
-          echo "$SDK/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
           echo "$SDK/tools/bin" >> "$GITHUB_PATH"
-          echo "$SDK/platform-tools" >> "$GITHUB_PATH"
-
-          export PATH="$SDK/cmdline-tools/latest/bin:$SDK/tools/bin:$SDK/platform-tools:$PATH"
-
-          echo "===== SDKMANAGER ====="
-
-          "$SDK/cmdline-tools/latest/bin/sdkmanager" --version
-
-          echo "===== ACCEPT LICENSES ====="
-
-          yes | "$SDK/cmdline-tools/latest/bin/sdkmanager" --licenses \
-            >/dev/null 2>&1 || true
-
-          echo "===== INSTALL SDK 33 ====="
-
-          "$SDK/cmdline-tools/latest/bin/sdkmanager" \
-            "platform-tools" \
-            "platforms;android-33" \
-            "build-tools;33.0.2"
-
-
-      # ============================================================
-      # ANDROID NDK 28c
-      # ============================================================
-
-      - name: Install Android NDK 28c
-        shell: bash
-        run: |
-          set -e
-
-          SDK="$HOME/.buildozer/android/platform/android-sdk"
-
-          export ANDROID_HOME="$SDK"
-          export ANDROID_SDK_ROOT="$SDK"
-          export PATH="$SDK/cmdline-tools/latest/bin:$SDK/platform-tools:$PATH"
-
-          echo "===== ACCEPTATION DES LICENCES ====="
-
-          "$SDK/cmdline-tools/latest/bin/sdkmanager" --licenses < /dev/null || true
-
-          echo "===== INSTALLATION NDK 28c ====="
-
-          "$SDK/cmdline-tools/latest/bin/sdkmanager" \
-            "ndk;28.2.13676358"
-
-          echo "===== VERIFICATION NDK ====="
-
-          NDK="$SDK/ndk/28.2.13676358"
-
-          if [ ! -d "$NDK" ]; then
-            echo "ERREUR : NDK 28c introuvable."
-            exit 1
-          fi
-
-          if [ ! -f "$NDK/source.properties" ]; then
-            echo "ERREUR : source.properties absent."
-            exit 1
-          fi
-
-          echo "===== NDK INSTALLE ====="
-
-          cat "$NDK/source.properties"
-
-          echo "ANDROIDNDK=$NDK" >> "$GITHUB_ENV"
-          echo "ANDROID_NDK_HOME=$NDK" >> "$GITHUB_ENV"
-
-          echo "NDK OK : $NDK"
-
-
-      # ============================================================
-      # VERIFICATION ANDROID
-      # ============================================================
-
-      - name: Verify Android NDK
-        shell: bash
-        run: |
-          set -e
-
-          SDK="$HOME/.buildozer/android/platform/android-sdk"
-          NDK="$SDK/ndk/28.2.13676358"
-
-          echo "===== NDK DIRECTORY ====="
-          ls -la "$SDK/ndk"
-
-          echo "===== NDK 28c ====="
-
-          test -d "$NDK"
-          test -f "$NDK/source.properties"
-
-          echo "===== VERSION ====="
-          cat "$NDK/source.properties"
-
-          echo "===== TOOLCHAIN ====="
-          test -d "$NDK/toolchains/llvm"
-
-          echo "===== NDK OK ====="
-
-
-      # ============================================================
-      # CACHE
-      # ============================================================
-
-      - name: Cache Buildozer
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.buildozer
-            .buildozer
-          key: buildozer-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}
-          restore-keys: |
-            buildozer-${{ runner.os }}-
-
-
-      # ============================================================
-      # CONFIGURATION BUILDOZER
-      # ============================================================
-
-      - name: Configure Buildozer environment
-        shell: bash
-        run: |
-          set -e
-
-          SDK="$HOME/.buildozer/android/platform/android-sdk"
-          NDK="$SDK/ndk/28.2.13676358"
-
-          echo "ANDROIDSDK=$SDK" >> "$GITHUB_ENV"
-          echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
-          echo "ANDROIDNDK=$NDK" >> "$GITHUB_ENV"
-          echo "ANDROIDAPI=33" >> "$GITHUB_ENV"
-          echo "ANDROIDMINAPI=24" >> "$GITHUB_ENV"
-
           echo "$SDK/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
           echo "$SDK/platform-tools" >> "$GITHUB_PATH"
           echo "$SDK/build-tools/33.0.2" >> "$GITHUB_PATH"
 
+          export PATH="$SDK/tools/bin:$SDK/cmdline-tools/latest/bin:$SDK/platform-tools:$SDK/build-tools/33.0.2:$PATH"
 
-      # ============================================================
-      # NETTOYAGE COMPLET
-      # ============================================================
+          echo "===== sdkmanager ====="
+          "$SDK/tools/bin/sdkmanager" --version
 
-      - name: Clean previous Buildozer build
+          echo "===== Licences ====="
+          yes | "$SDK/tools/bin/sdkmanager" --licenses >/dev/null 2>&1 || true
+
+          echo "===== SDK ====="
+
+          "$SDK/tools/bin/sdkmanager" \
+            "platform-tools" \
+            "platforms;android-33" \
+            "build-tools;33.0.2"
+
+          echo "===== Vérification SDK ====="
+
+          test -x "$SDK/tools/bin/sdkmanager"
+          test -d "$SDK/platforms/android-33"
+          test -d "$SDK/build-tools/33.0.2"
+          test -x "$SDK/build-tools/33.0.2/aidl"
+
+          echo "SDK OK"
+
+      - name: Clean Buildozer cache
         shell: bash
         run: |
           set -e
 
-          echo "===== CLEAN BUILD ====="
-
           rm -rf .buildozer
-          rm -rf bin
 
-          mkdir -p bin
+          echo "Cache Buildozer supprimé."
 
+      - name: Prepare local python-for-android recipe
+        shell: bash
+        run: |
+          set -e
 
-      # ============================================================
-      # BUILD APK
-      # ============================================================
+          echo "===== Vérification recette ReportLab ====="
+
+          test -f recipes/reportlab/__init__.py
+
+          echo "Recette trouvée:"
+          cat recipes/reportlab/__init__.py
 
       - name: Build APK
         shell: bash
@@ -306,57 +152,39 @@ jobs:
           set -e
 
           SDK="$HOME/.buildozer/android/platform/android-sdk"
-          NDK="$SDK/ndk/28.2.13676358"
-
-          export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
 
           export ANDROIDSDK="$SDK"
           export ANDROID_HOME="$SDK"
-          export ANDROIDNDK="$NDK"
-          export ANDROIDAPI=33
-          export ANDROIDMINAPI=24
+          export ANDROID_SDK_ROOT="$SDK"
 
           export PATH="$SDK/cmdline-tools/latest/bin:$SDK/tools/bin:$SDK/platform-tools:$SDK/build-tools/33.0.2:$PATH"
-
-          echo "======================================"
-          echo " ENVIRONNEMENT FINAL"
-          echo "======================================"
-
-          echo "JAVA_HOME=$JAVA_HOME"
-          echo "ANDROIDSDK=$ANDROIDSDK"
-          echo "ANDROIDNDK=$ANDROIDNDK"
-          echo "ANDROIDAPI=$ANDROIDAPI"
-          echo "ANDROIDMINAPI=$ANDROIDMINAPI"
 
           echo "===== JAVA ====="
           java -version
 
+          echo "===== ANDROID ====="
+          echo "ANDROIDSDK=$ANDROIDSDK"
+          echo "ANDROID_HOME=$ANDROID_HOME"
+
+          echo "===== SDKMANAGER ====="
+          "$SDK/tools/bin/sdkmanager" --version
+
+          echo "===== AIDL ====="
+          "$SDK/build-tools/33.0.2/aidl" --version || true
+
           echo "===== BUILDOZER ====="
           buildozer --version
 
-          echo "===== SDKMANAGER ====="
-          sdkmanager --version
-
-          echo "===== AIDL ====="
-          aidl --version || true
-
-          echo "======================================"
-          echo " BUILD APK"
-          echo "======================================"
+          echo "===== BUILD APK ====="
 
           buildozer -v android debug
-
-
-      # ============================================================
-      # VERIFICATION APK
-      # ============================================================
 
       - name: Check APK
         shell: bash
         run: |
           set -e
 
-          echo "===== APK ====="
+          echo "===== APK généré ====="
 
           find bin \
             -maxdepth 1 \
@@ -364,19 +192,7 @@ jobs:
             \( -name "*.apk" -o -name "*.aab" \) \
             -print
 
-          APK="$(find bin -maxdepth 1 -type f -name '*.apk' -print -quit)"
-
-          if [ -z "$APK" ]; then
-            echo "ERREUR : aucun APK généré."
-            exit 1
-          fi
-
-          echo "APK trouvé : $APK"
-
-
-      # ============================================================
-      # UPLOAD
-      # ============================================================
+          test -n "$(find bin -maxdepth 1 -name '*.apk' -print -quit)"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
@@ -384,5 +200,4 @@ jobs:
           name: suivi-auto-apk
           path: bin/*.apk
           if-no-files-found: error
-
 
