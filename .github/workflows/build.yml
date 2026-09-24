@@ -1,4 +1,3 @@
-```yaml
 name: Build Android APK
 
 on:
@@ -351,4 +350,4 @@ jobs:
           name: suivi-auto-build-logs
           path: build_logs/
           if-no-files-found: warn
-```
+
