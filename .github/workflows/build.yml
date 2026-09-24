@@ -11,30 +11,46 @@ jobs:
     runs-on: ubuntu-22.04
 
     env:
-      JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.20-1/x64
-      ANDROIDAPI: "33"
-      ANDROIDMINAPI: "24"
-      ANDROID_NDK_VERSION: "28c"
+      ANDROID_API: "33"
+      ANDROID_MIN_API: "24"
+      ANDROID_BUILD_TOOLS: "35.0.0"
+      ANDROID_NDK_VERSION: "28.2.13676358"
+      JAVA_VERSION: "17"
 
     steps:
 
+      # ---------------------------------------------------------
+      # 1. Récupération du projet
+      # ---------------------------------------------------------
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # ---------------------------------------------------------
+      # 2. Python
+      # ---------------------------------------------------------
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.10"
 
+      # ---------------------------------------------------------
+      # 3. Java 17
+      # ---------------------------------------------------------
       - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
 
+      # ---------------------------------------------------------
+      # 4. Dépendances système
+      # ---------------------------------------------------------
       - name: Install system dependencies
         run: |
+          set -euxo pipefail
+
           sudo apt-get update
+
           sudo apt-get install -y \
             git \
             zip \
@@ -47,67 +63,180 @@ jobs:
             libncurses5 \
             libncurses5-dev
 
+      # ---------------------------------------------------------
+      # 5. Buildozer / Cython
+      # ---------------------------------------------------------
       - name: Install Python build tools
         run: |
+          set -euxo pipefail
+
           python -m pip install --upgrade pip
+
           python -m pip install \
             buildozer==1.6.0 \
             cython==0.29.37
 
-      - name: Verify local ReportLab archive
+      # ---------------------------------------------------------
+      # 6. Initialisation Buildozer
+      # ---------------------------------------------------------
+      - name: Initialize Buildozer Android environment
         run: |
           set -euxo pipefail
 
-          test -f p4a-recipes/reportlab/__init__.py
-          test -f p4a-recipes/reportlab/reportlab-fe660f227cac.tar.gz
+          buildozer android clean || true
 
-          echo "ReportLab archive found:"
-          ls -lh p4a-recipes/reportlab/reportlab-fe660f227cac.tar.gz
-
-          echo "ReportLab recipe:"
-          sed -n '1,200p' p4a-recipes/reportlab/__init__.py
-
-      - name: Configure Android environment
+      # ---------------------------------------------------------
+      # 7. Déterminer le SDK Buildozer
+      # ---------------------------------------------------------
+      - name: Configure Android SDK environment
         run: |
           set -euxo pipefail
 
           SDK="$HOME/.buildozer/android/platform/android-sdk"
 
+          mkdir -p "$SDK"
+
           echo "ANDROIDSDK=$SDK" >> "$GITHUB_ENV"
           echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
           echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
 
-          echo "ANDROIDAPI=33" >> "$GITHUB_ENV"
-          echo "ANDROIDMINAPI=24" >> "$GITHUB_ENV"
+          echo "ANDROIDAPI=${ANDROID_API}" >> "$GITHUB_ENV"
+          echo "ANDROIDMINAPI=${ANDROID_MIN_API}" >> "$GITHUB_ENV"
 
           echo "$SDK/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
           echo "$SDK/platform-tools" >> "$GITHUB_PATH"
-          echo "$SDK/build-tools/35.0.0" >> "$GITHUB_PATH"
+          echo "$SDK/build-tools/${ANDROID_BUILD_TOOLS}" >> "$GITHUB_PATH"
 
-      - name: Build APK
+      # ---------------------------------------------------------
+      # 8. Installer/mettre à disposition les outils Android
+      # ---------------------------------------------------------
+      - name: Install Android SDK components
+        run: |
+          set -euxo pipefail
+
+          SDK="$ANDROID_SDK_ROOT"
+          SDKMANAGER="$SDK/cmdline-tools/latest/bin/sdkmanager"
+
+          echo "SDK = $SDK"
+          echo "sdkmanager = $SDKMANAGER"
+
+          if [ ! -x "$SDKMANAGER" ]; then
+            echo "sdkmanager introuvable :"
+            find "$SDK" -maxdepth 5 -type f -name sdkmanager -print || true
+            exit 1
+          fi
+
+          # -----------------------------------------------------
+          # ACCEPTATION AUTOMATIQUE DES LICENCES
+          # -----------------------------------------------------
+          yes | "$SDKMANAGER" \
+            --sdk_root="$SDK" \
+            --licenses
+
+          # -----------------------------------------------------
+          # Installation des composants nécessaires
+          # -----------------------------------------------------
+          yes | "$SDKMANAGER" \
+            --sdk_root="$SDK" \
+            "platform-tools" \
+            "platforms;android-${ANDROID_API}" \
+            "build-tools;${ANDROID_BUILD_TOOLS}"
+
+          # -----------------------------------------------------
+          # Vérifications
+          # -----------------------------------------------------
+          test -d "$SDK/platforms/android-${ANDROID_API}"
+          test -d "$SDK/build-tools/${ANDROID_BUILD_TOOLS}"
+          test -x "$SDK/build-tools/${ANDROID_BUILD_TOOLS}/aidl"
+
+          echo "Android SDK correctement installé."
+
+          echo "AIDL :"
+          "$SDK/build-tools/${ANDROID_BUILD_TOOLS}/aidl" --help >/dev/null
+
+      # ---------------------------------------------------------
+      # 9. Vérifier la recette ReportLab locale
+      # ---------------------------------------------------------
+      - name: Verify local ReportLab recipe
+        run: |
+          set -euxo pipefail
+
+          echo "Vérification de la recette ReportLab..."
+
+          test -f p4a-recipes/reportlab/__init__.py
+          test -f p4a-recipes/reportlab/reportlab-fe660f227cac.tar.gz
+
+          echo
+          echo "Archive ReportLab :"
+          ls -lh \
+            p4a-recipes/reportlab/reportlab-fe660f227cac.tar.gz
+
+          echo
+          echo "Recette ReportLab :"
+          sed -n '1,200p' p4a-recipes/reportlab/__init__.py
+
+      # ---------------------------------------------------------
+      # 10. Nettoyage complet du précédent environnement p4a
+      # ---------------------------------------------------------
+      - name: Clean Buildozer build directories
         run: |
           set -euxo pipefail
 
           rm -rf .buildozer
+          rm -rf bin
 
-          buildozer android clean || true
+          mkdir -p bin
 
-          buildozer -v android debug
-
-      - name: Find APK
+      # ---------------------------------------------------------
+      # 11. Reconstruction
+      # ---------------------------------------------------------
+      - name: Build Android APK
         run: |
           set -euxo pipefail
 
-          echo "Generated files:"
-          find bin -maxdepth 2 -type f -print || true
+          export ANDROIDSDK="$ANDROID_SDK_ROOT"
+          export ANDROID_HOME="$ANDROID_SDK_ROOT"
+          export ANDROID_SDK_ROOT="$ANDROID_SDK_ROOT"
 
-          test -n "$(find bin -type f -name '*.apk' -print -quit)"
+          export ANDROIDAPI="$ANDROID_API"
+          export ANDROIDMINAPI="$ANDROID_MIN_API"
 
+          buildozer -v android debug
+
+      # ---------------------------------------------------------
+      # 12. Vérifier que l'APK existe
+      # ---------------------------------------------------------
+      - name: Verify APK
+        run: |
+          set -euxo pipefail
+
+          echo "Contenu de bin/ :"
+
+          find bin \
+            -maxdepth 2 \
+            -type f \
+            -print
+
+          APK="$(find bin -type f -name '*.apk' -print -quit)"
+
+          if [ -z "$APK" ]; then
+            echo "ERREUR : aucun APK généré."
+            exit 1
+          fi
+
+          echo
+          echo "APK généré :"
+          echo "$APK"
+
+          ls -lh "$APK"
+
+      # ---------------------------------------------------------
+      # 13. Publier l'APK comme artefact GitHub
+      # ---------------------------------------------------------
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: suivi-auto-apk
           path: bin/*.apk
           if-no-files-found: error
-
 
