@@ -18,32 +18,39 @@ jobs:
 
     steps:
 
-      # ---------------------------------------------------------
-      # 1. Récupération du projet
-      # ---------------------------------------------------------
+      # ============================================================
+      # CHECKOUT
+      # ============================================================
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # ---------------------------------------------------------
-      # 2. Python
-      # ---------------------------------------------------------
+
+      # ============================================================
+      # PYTHON
+      # ============================================================
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.10"
 
-      # ---------------------------------------------------------
-      # 3. Java 17
-      # ---------------------------------------------------------
+
+      # ============================================================
+      # JAVA
+      # ============================================================
+
       - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
 
-      # ---------------------------------------------------------
-      # 4. Dépendances système
-      # ---------------------------------------------------------
+
+      # ============================================================
+      # SYSTEM DEPENDENCIES
+      # ============================================================
+
       - name: Install system dependencies
         run: |
           set -euxo pipefail
@@ -63,9 +70,11 @@ jobs:
             libncurses5 \
             libncurses5-dev
 
-      # ---------------------------------------------------------
-      # 5. Buildozer / Cython
-      # ---------------------------------------------------------
+
+      # ============================================================
+      # BUILDOZER + CYTHON
+      # ============================================================
+
       - name: Install Python build tools
         run: |
           set -euxo pipefail
@@ -76,18 +85,22 @@ jobs:
             buildozer==1.6.0 \
             cython==0.29.37
 
-      # ---------------------------------------------------------
-      # 6. Initialisation / nettoyage Buildozer
-      # ---------------------------------------------------------
+
+      # ============================================================
+      # INITIALISATION BUILDOZER
+      # ============================================================
+
       - name: Initialize Buildozer Android environment
         run: |
           set -euxo pipefail
 
           buildozer android clean || true
 
-      # ---------------------------------------------------------
-      # 7. Configuration Android SDK
-      # ---------------------------------------------------------
+
+      # ============================================================
+      # ANDROID SDK ENVIRONMENT
+      # ============================================================
+
       - name: Configure Android SDK environment
         run: |
           set -euxo pipefail
@@ -108,19 +121,21 @@ jobs:
           echo "$SDK/platform-tools" >> "$GITHUB_PATH"
           echo "$SDK/build-tools/${ANDROID_BUILD_TOOLS}" >> "$GITHUB_PATH"
 
-          echo
           echo "=========================================="
           echo "Android SDK configuration"
           echo "=========================================="
+
           echo "ANDROIDSDK=$SDK"
           echo "ANDROID_HOME=$SDK"
           echo "ANDROID_SDK_ROOT=$SDK"
           echo "ANDROIDAPI=${ANDROID_API}"
           echo "ANDROIDMINAPI=${ANDROID_MIN_API}"
 
-      # ---------------------------------------------------------
-      # 8. Installer Android Command Line Tools
-      # ---------------------------------------------------------
+
+      # ============================================================
+      # ANDROID SDK + COMMAND LINE TOOLS
+      # ============================================================
+
       - name: Install Android SDK components
         run: |
           set -euxo pipefail
@@ -129,7 +144,6 @@ jobs:
           CMDLINE_TOOLS="$SDK/cmdline-tools/latest"
           SDKMANAGER="$CMDLINE_TOOLS/bin/sdkmanager"
 
-          echo
           echo "=========================================="
           echo "Installation Android Command Line Tools"
           echo "=========================================="
@@ -137,19 +151,11 @@ jobs:
           echo "SDK = $SDK"
           echo "SDKMANAGER = $SDKMANAGER"
 
-          # -----------------------------------------------------
-          # Télécharger les Android Command Line Tools
-          # -----------------------------------------------------
-
           mkdir -p "$SDK/cmdline-tools"
 
           wget -q \
             "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip" \
             -O /tmp/commandlinetools.zip
-
-          # -----------------------------------------------------
-          # Installer les outils
-          # -----------------------------------------------------
 
           rm -rf "$CMDLINE_TOOLS"
 
@@ -159,34 +165,15 @@ jobs:
             /tmp/commandlinetools.zip \
             -d "$CMDLINE_TOOLS"
 
-          # L'archive Google contient :
-          #
-          # cmdline-tools/
-          #   bin/
-          #   lib/
-          #   source.properties
-          #
-          # On veut :
-          #
-          # latest/
-          #   bin/
-          #   lib/
-          #   source.properties
-
           if [ -d "$CMDLINE_TOOLS/cmdline-tools" ]; then
             mv "$CMDLINE_TOOLS/cmdline-tools/"* \
-               "$CMDLINE_TOOLS/"
+              "$CMDLINE_TOOLS/"
 
             rm -rf "$CMDLINE_TOOLS/cmdline-tools"
           fi
 
           chmod +x "$SDKMANAGER"
 
-          # -----------------------------------------------------
-          # Vérifier sdkmanager
-          # -----------------------------------------------------
-
-          echo
           echo "=========================================="
           echo "Vérification sdkmanager"
           echo "=========================================="
@@ -195,23 +182,14 @@ jobs:
 
           "$SDKMANAGER" --version
 
-          # -----------------------------------------------------
-          # Accepter les licences
-          # -----------------------------------------------------
+          echo "=========================================="
+          echo "Acceptation licences Android"
+          echo "=========================================="
 
           yes | "$SDKMANAGER" \
             --sdk_root="$SDK" \
             --licenses >/dev/null 2>&1 || true
 
-          # -----------------------------------------------------
-          # Installer les composants Android
-          #
-          # Le NDK n'est volontairement PAS installé ici.
-          # python-for-android détecte et installe lui-même
-          # la version recommandée (actuellement r28c).
-          # -----------------------------------------------------
-
-          echo
           echo "=========================================="
           echo "Installation des composants Android"
           echo "=========================================="
@@ -222,11 +200,6 @@ jobs:
             "platforms;android-${ANDROID_API}" \
             "build-tools;${ANDROID_BUILD_TOOLS}"
 
-          # -----------------------------------------------------
-          # Vérifications
-          # -----------------------------------------------------
-
-          echo
           echo "=========================================="
           echo "Vérifications Android SDK"
           echo "=========================================="
@@ -239,25 +212,23 @@ jobs:
 
           test -d "$SDK/platform-tools"
 
-          echo
           echo "SDK Manager :"
           "$SDKMANAGER" --version
 
-          echo
           echo "Android Platform :"
           ls -ld "$SDK/platforms/android-${ANDROID_API}"
 
-          echo
           echo "Build Tools :"
           ls -ld "$SDK/build-tools/${ANDROID_BUILD_TOOLS}"
 
-          echo
           echo "Platform Tools :"
           ls -ld "$SDK/platform-tools"
 
-      # ---------------------------------------------------------
-      # 9. Compatibilité sdkmanager avec python-for-android
-      # ---------------------------------------------------------
+
+      # ============================================================
+      # COMPATIBILITÉ BUILDOZER / SDKMANAGER
+      # ============================================================
+
       - name: Configure sdkmanager compatibility
         run: |
           set -euxo pipefail
@@ -265,148 +236,162 @@ jobs:
           SDK="$ANDROID_SDK_ROOT"
 
           MODERN_SDKMANAGER="$SDK/cmdline-tools/latest/bin/sdkmanager"
+
           LEGACY_DIR="$SDK/tools/bin"
+
           LEGACY_SDKMANAGER="$LEGACY_DIR/sdkmanager"
 
-          echo
           echo "=========================================="
           echo "Configuration compatibilité sdkmanager"
           echo "=========================================="
 
           echo "SDK = $SDK"
+
           echo "sdkmanager moderne = $MODERN_SDKMANAGER"
+
           echo "sdkmanager legacy = $LEGACY_SDKMANAGER"
 
-          # Vérifier le sdkmanager moderne
           test -x "$MODERN_SDKMANAGER"
 
-          # Créer le chemin attendu par certaines versions
-          # de python-for-android
           mkdir -p "$LEGACY_DIR"
 
-          # Créer un lien symbolique
           ln -sf \
             "$MODERN_SDKMANAGER" \
             "$LEGACY_SDKMANAGER"
 
-          # -----------------------------------------------------
-          # Vérification
-          # -----------------------------------------------------
-
-          echo
           echo "Contenu de tools/bin :"
 
           ls -la "$LEGACY_DIR"
 
-          echo
           echo "Test sdkmanager via chemin legacy :"
 
           "$LEGACY_SDKMANAGER" --version
 
-          echo
           echo "sdkmanager legacy correctement configuré."
 
-      # ---------------------------------------------------------
-      # 10. Vérifier la recette ReportLab locale
-      # ---------------------------------------------------------
+
+      # ============================================================
+      # CACHE BUILDOZER / PYTHON-FOR-ANDROID
+      # ============================================================
+
+      - name: Cache Buildozer downloads
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.buildozer/android/packages
+            ~/.buildozer/android/platform
+          key: buildozer-android-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}
+          restore-keys: |
+            buildozer-android-${{ runner.os }}-
+
+
+      # ============================================================
+      # REPORTLAB RECIPE
+      # ============================================================
+
       - name: Verify local ReportLab recipe
         run: |
           set -euxo pipefail
 
-          echo
           echo "=========================================="
           echo "Vérification recette ReportLab"
           echo "=========================================="
 
           test -f p4a-recipes/reportlab/__init__.py
 
-          test -f \
-            p4a-recipes/reportlab/reportlab-fe660f227cac.tar.gz
+          test -f p4a-recipes/reportlab/reportlab-fe660f227cac.tar.gz
 
-          echo
           echo "Archive ReportLab :"
 
           ls -lh \
             p4a-recipes/reportlab/reportlab-fe660f227cac.tar.gz
 
-          echo
           echo "Recette ReportLab :"
 
           sed -n '1,200p' \
             p4a-recipes/reportlab/__init__.py
 
-      # ---------------------------------------------------------
-      # 11. Nettoyage des répertoires Buildozer du projet
-      # ---------------------------------------------------------
+
+      # ============================================================
+      # CLEAN PROJECT BUILD
+      # ============================================================
+
       - name: Clean Buildozer build directories
         run: |
           set -euxo pipefail
 
           rm -rf .buildozer
+
           rm -rf bin
 
           mkdir -p bin
 
-      # ---------------------------------------------------------
-      # 12. Vérification finale de l'environnement Android
-      # ---------------------------------------------------------
+
+      # ============================================================
+      # FINAL ANDROID ENVIRONMENT CHECK
+      # ============================================================
+
       - name: Verify Android environment before Buildozer
         run: |
           set -euxo pipefail
 
           SDK="$ANDROID_SDK_ROOT"
 
-          echo
           echo "=========================================="
           echo "Environnement Android final"
           echo "=========================================="
 
-          echo
           echo "ANDROIDSDK:"
           echo "$ANDROIDSDK"
 
-          echo
           echo "ANDROID_HOME:"
           echo "$ANDROID_HOME"
 
-          echo
           echo "ANDROID_SDK_ROOT:"
           echo "$ANDROID_SDK_ROOT"
 
-          echo
+          echo "ANDROIDAPI:"
+          echo "$ANDROIDAPI"
+
+          echo "ANDROIDMINAPI:"
+          echo "$ANDROIDMINAPI"
+
           echo "sdkmanager moderne:"
+
           "$SDK/cmdline-tools/latest/bin/sdkmanager" --version
 
-          echo
           echo "sdkmanager legacy:"
+
           "$SDK/tools/bin/sdkmanager" --version
 
-          echo
           echo "AIDL:"
+
           "$SDK/build-tools/${ANDROID_BUILD_TOOLS}/aidl" --help >/dev/null
 
-          echo
           echo "Java:"
+
           java -version
 
-          echo
           echo "Python:"
+
           python --version
 
-          echo
           echo "Cython:"
+
           cython --version
 
-          echo
           echo "Buildozer:"
+
           buildozer --version
 
-      # ---------------------------------------------------------
-      # 13. Construction APK
-      # ---------------------------------------------------------
+
+      # ============================================================
+      # BUILDOZER BUILD
+      # ============================================================
+
       - name: Build Android APK
         run: |
-          set -euxo pipefail
+          set -uo pipefail
 
           export ANDROIDSDK="$ANDROID_SDK_ROOT"
           export ANDROID_HOME="$ANDROID_SDK_ROOT"
@@ -415,28 +400,126 @@ jobs:
           export ANDROIDAPI="$ANDROID_API"
           export ANDROIDMINAPI="$ANDROID_MIN_API"
 
+          # ========================================================
+          # NDK
+          # ========================================================
+          #
+          # GitHub Runner possède plusieurs NDK préinstallés.
+          # On ne veut pas que ceux-ci interfèrent avec le NDK
+          # sélectionné par python-for-android.
+          #
+          # python-for-android utilise ici :
+          # android-ndk-r28c
+          #
+
+          unset ANDROID_NDK
+          unset ANDROID_NDK_HOME
+          unset ANDROID_NDK_ROOT
+
+          # ========================================================
+          # PATH
+          # ========================================================
+
           export PATH="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$ANDROID_SDK_ROOT/tools/bin:$ANDROID_SDK_ROOT/platform-tools:$ANDROID_SDK_ROOT/build-tools/${ANDROID_BUILD_TOOLS}:$PATH"
 
-          echo
+          # ========================================================
+          # PARAMÈTRES RÉSEAU P4A
+          # ========================================================
+
+          export P4A_DOWNLOAD_RETRIES=10
+          export P4A_DOWNLOAD_TIMEOUT=120
+
+          # ========================================================
+          # ENVIRONNEMENT
+          # ========================================================
+
           echo "=========================================="
-          echo "Lancement Buildozer"
+          echo "ENVIRONNEMENT AVANT BUILDOZER"
           echo "=========================================="
 
-          buildozer -v android debug
+          echo "JAVA_HOME=$JAVA_HOME"
 
-      # ---------------------------------------------------------
-      # 14. Vérifier que l'APK existe
-      # ---------------------------------------------------------
+          echo "ANDROIDSDK=$ANDROIDSDK"
+
+          echo "ANDROID_HOME=$ANDROID_HOME"
+
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+
+          echo "ANDROIDAPI=$ANDROIDAPI"
+
+          echo "ANDROIDMINAPI=$ANDROIDMINAPI"
+
+          echo "ANDROID_NDK=${ANDROID_NDK-<unset>}"
+
+          echo "ANDROID_NDK_HOME=${ANDROID_NDK_HOME-<unset>}"
+
+          echo "ANDROID_NDK_ROOT=${ANDROID_NDK_ROOT-<unset>}"
+
+          echo "ANDROIDNDK=${ANDROIDNDK-<unset>}"
+
+          echo "P4A_DOWNLOAD_RETRIES=$P4A_DOWNLOAD_RETRIES"
+
+          echo "P4A_DOWNLOAD_TIMEOUT=$P4A_DOWNLOAD_TIMEOUT"
+
+          echo "=========================================="
+          echo "CACHE BUILDOZER"
+          echo "=========================================="
+
+          mkdir -p "$HOME/.buildozer/android/packages"
+
+          du -sh \
+            "$HOME/.buildozer/android/packages" \
+            2>/dev/null || true
+
+          echo "=========================================="
+          echo "LANCEMENT BUILDOZER"
+          echo "=========================================="
+
+          set +e
+
+          buildozer -v android debug 2>&1 | tee buildozer-full.log
+
+          BUILDOZER_STATUS=${PIPESTATUS[0]}
+
+          set -e
+
+          echo "=========================================="
+          echo "FIN BUILDOZER"
+          echo "=========================================="
+
+          echo "Code retour Buildozer = $BUILDOZER_STATUS"
+
+          echo "=========================================="
+          echo "RECHERCHE DES ERREURS RÉSEAU"
+          echo "=========================================="
+
+          grep -Ei \
+            'HTTP Error|502|503|504|Gateway|Download failed|urllib|timeout|timed out' \
+            buildozer-full.log \
+            | tail -n 100 \
+            || true
+
+          echo "=========================================="
+          echo "DERNIÈRES LIGNES DU LOG"
+          echo "=========================================="
+
+          tail -n 200 buildozer-full.log
+
+          exit "$BUILDOZER_STATUS"
+
+
+      # ============================================================
+      # APK VERIFICATION
+      # ============================================================
+
       - name: Verify APK
         run: |
           set -euxo pipefail
 
-          echo
           echo "=========================================="
           echo "Vérification APK"
           echo "=========================================="
 
-          echo
           echo "Contenu de bin/ :"
 
           find bin \
@@ -447,25 +530,39 @@ jobs:
           APK="$(find bin -type f -name '*.apk' -print -quit)"
 
           if [ -z "$APK" ]; then
-            echo
             echo "ERREUR : aucun APK généré."
             exit 1
           fi
 
-          echo
           echo "APK généré :"
+
           echo "$APK"
 
-          echo
           echo "Taille :"
+
           ls -lh "$APK"
 
-      # ---------------------------------------------------------
-      # 15. Publier l'APK comme artefact GitHub
-      # ---------------------------------------------------------
+
+      # ============================================================
+      # UPLOAD APK
+      # ============================================================
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: suivi-auto-apk
           path: bin/*.apk
           if-no-files-found: error
+
+
+      # ============================================================
+      # UPLOAD LOG BUILDOZER
+      # ============================================================
+
+      - name: Upload Buildozer diagnostic log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: buildozer-full-log
+          path: buildozer-full.log
+          if-no-files-found: warn
