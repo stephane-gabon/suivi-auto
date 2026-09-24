@@ -241,6 +241,7 @@ jobs:
       # ------------------------------------------------------------
       # 11. Installer réellement NDK r28c
       # ------------------------------------------------------------
+
       - name: Install Android NDK r28c
         shell: bash
         run: |
@@ -251,21 +252,43 @@ jobs:
 
           SDKMANAGER="$SDK/cmdline-tools/latest/bin/sdkmanager"
 
+          echo "======================================"
+          echo "INSTALLATION NDK r28c"
+          echo "======================================"
+
           "$SDKMANAGER" \
             --sdk_root="$SDK" \
             "ndk;28.2.13676358"
 
-          test -f "$NDK/source.properties"
+          echo "======================================"
+          echo "VERIFICATION NDK"
+          echo "======================================"
 
-          echo "===== NDK ====="
+          test -f "$NDK/source.properties"
 
           cat "$NDK/source.properties"
 
+          # Le fichier source.properties contient :
+          # Pkg.Revision = 28.2.13676358
+          # et non :
+          # Pkg.Revision=28.2.13676358
+
           grep -q \
-            "Pkg.Revision=28.2.13676358" \
+            "Pkg.Revision = 28.2.13676358" \
             "$NDK/source.properties"
 
-          echo "NDK r28c installé."
+          grep -q \
+            "Pkg.ReleaseName = r28c" \
+            "$NDK/source.properties"
+
+          echo
+          echo "======================================"
+          echo " NDK r28c CORRECTEMENT INSTALLE"
+          echo "======================================"
+
+          echo "NDK : $NDK"
+          echo "Version : 28.2.13676358"
+          echo "Release : r28c"
 
 
       # ------------------------------------------------------------
