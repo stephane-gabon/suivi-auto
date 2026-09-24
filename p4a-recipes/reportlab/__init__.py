@@ -1,25 +1,22 @@
-from pythonforandroid.recipe import PythonRecipe
+from pythonforandroid.recipe import PythonRecipe, IncludedFilesBehaviour
 
-
-class ReportLabRecipe(PythonRecipe):
+class ReportLabRecipe(IncludedFilesBehaviour, PythonRecipe):
     """
-    Recette ReportLab utilisant une archive officielle
-    ReportLab au lieu de l'ancienne source Mercurial.
+    ReportLab fourni localement afin d'éviter le téléchargement
+    depuis hg.reportlab.com, qui retourne HTTP 403 dans GitHub Actions.
     """
-
-    version = "5.0.1"
-
-    url = (
-        "https://www.reportlab.com/pypi/simple/reportlab/"
-        "reportlab-{version}.tar.gz"
-    )
-
-    depends = [
-        "python3",
-    ]
-
+    
+    version = "fe660f227cac"
+    
+    # Aucun téléchargement Internet.
+    url = None
+    
+    # Archive présente directement dans le dépôt GitHub.
+    src_filename = "reportlab-fe660f227cac.tar.gz"
+    
+    depends = ["python3"]
+    
     site_packages_name = "reportlab"
-
-
+    
+    
     recipe = ReportLabRecipe()
-
