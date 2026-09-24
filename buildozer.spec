@@ -27,7 +27,7 @@ warn_on_root = 1
 
 android.api = 33
 android.minapi = 24
-android.sdk_build_tools = 34.0.0
+android.sdk_build_tools = 35.0.0
 android.ndk = 28c
 android.archs = arm64-v8a,armeabi-v7a
 
