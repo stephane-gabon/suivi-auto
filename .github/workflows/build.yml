@@ -513,101 +513,164 @@ jobs:
         run: |
           set -uo pipefail
 
-          # --------------------------------------------------------
-          # Android environment
-          # --------------------------------------------------------
+          echo "=================================================="
+          echo "PREPARING BUILD ENVIRONMENT"
+          echo "=================================================="
 
           export ANDROIDSDK="$ANDROID_SDK_ROOT"
-
           export ANDROID_HOME="$ANDROID_SDK_ROOT"
-
           export ANDROID_SDK_ROOT="$ANDROID_SDK_ROOT"
-
           export ANDROIDAPI="$ANDROID_API"
-
           export ANDROIDMINAPI="$ANDROID_MIN_API"
-
-          # --------------------------------------------------------
-          # IMPORTANT:
-          # Do NOT force an NDK version here.
-          #
-          # python-for-android will select the recommended NDK,
-          # currently r28c for this build.
-          # --------------------------------------------------------
 
           unset ANDROID_NDK
           unset ANDROID_NDK_HOME
           unset ANDROID_NDK_ROOT
 
-          # --------------------------------------------------------
-          # Local ReportLab source
-          # --------------------------------------------------------
-
-          export P4A_REPORTLAB_DIR="$P4A_REPORTLAB_DIR"
-
-          # --------------------------------------------------------
-          # PATH
-          # --------------------------------------------------------
-
           export PATH="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$ANDROID_SDK_ROOT/tools/bin:$ANDROID_SDK_ROOT/platform-tools:$ANDROID_SDK_ROOT/build-tools/${ANDROID_BUILD_TOOLS}:$PATH"
 
-          # --------------------------------------------------------
-          # Diagnostics
-          # --------------------------------------------------------
+          # ========================================================
+          # LOCAL REPORTLAB SOURCE
+          # ========================================================
+
+          REPORTLAB_ARCHIVE="$GITHUB_WORKSPACE/p4a-recipes/reportlab/reportlab-fe660f227cac.tar.gz"
+
+          REPORTLAB_ROOT="$HOME/.buildozer/local-reportlab"
+
+          echo "ReportLab archive:"
+          echo "$REPORTLAB_ARCHIVE"
+
+          test -f "$REPORTLAB_ARCHIVE"
+
+          rm -rf "$REPORTLAB_ROOT"
+
+          mkdir -p "$REPORTLAB_ROOT"
+
+          echo ""
+          echo "Extracting ReportLab archive..."
+
+          tar -xzf \
+            "$REPORTLAB_ARCHIVE" \
+            -C "$REPORTLAB_ROOT"
+
+          REPORTLAB_DIR="$(
+            find "$REPORTLAB_ROOT" \
+              -mindepth 1 \
+              -maxdepth 1 \
+              -type d \
+              -print \
+              -quit
+          )"
+
+          if [ -z "$REPORTLAB_DIR" ]; then
+            echo "ERROR: ReportLab extraction directory not found."
+
+            find "$REPORTLAB_ROOT" \
+              -maxdepth 3 \
+              -print
+
+            exit 1
+          fi
+
+          # IMPORTANT:
+          # p4a reads this exact environment variable.
+          export P4A_REPORTLAB_DIR="$REPORTLAB_DIR"
 
           echo ""
           echo "=================================================="
-          echo "BUILDOZER BUILD"
+          echo "REPORTLAB CONFIGURATION"
           echo "=================================================="
 
+          echo "P4A_REPORTLAB_DIR=$P4A_REPORTLAB_DIR"
+
+          test -d "$P4A_REPORTLAB_DIR"
+
           echo ""
+          echo "ReportLab files:"
+
+          find "$P4A_REPORTLAB_DIR" \
+            -maxdepth 2 \
+            -type f \
+            -print \
+            | head -n 100
+
+          # ========================================================
+          # VERIFY BUILDOZER CONFIGURATION
+          # ========================================================
+
+          echo ""
+          echo "=================================================="
+          echo "BUILDOZER LOCAL RECIPES"
+          echo "=================================================="
+
+          grep -n \
+            "p4a.local_recipes" \
+            buildozer.spec \
+            || true
+
+          if ! grep -Eq \
+            '^[[:space:]]*p4a\.local_recipes[[:space:]]*=[[:space:]]*p4a-recipes' \
+            buildozer.spec
+          then
+            echo ""
+            echo "ERROR:"
+            echo "buildozer.spec must contain:"
+            echo ""
+            echo "p4a.local_recipes = p4a-recipes"
+            echo ""
+
+            exit 1
+          fi
+
+          # ========================================================
+          # VERIFY ENVIRONMENT
+          # ========================================================
+
+          echo ""
+          echo "=================================================="
+          echo "ENVIRONMENT CHECK"
+          echo "=================================================="
+
+          echo "ANDROIDSDK=$ANDROIDSDK"
+          echo "ANDROID_HOME=$ANDROID_HOME"
           echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+          echo "ANDROIDAPI=$ANDROIDAPI"
+          echo "ANDROIDMINAPI=$ANDROIDMINAPI"
 
-          echo "ANDROID_API=$ANDROID_API"
-
-          echo "ANDROID_MIN_API=$ANDROID_MIN_API"
-
-          echo "ANDROID_BUILD_TOOLS=$ANDROID_BUILD_TOOLS"
-
+          echo ""
           echo "P4A_REPORTLAB_DIR=$P4A_REPORTLAB_DIR"
 
           echo ""
           echo "ANDROID_NDK=${ANDROID_NDK-<unset>}"
-
           echo "ANDROID_NDK_HOME=${ANDROID_NDK_HOME-<unset>}"
-
           echo "ANDROID_NDK_ROOT=${ANDROID_NDK_ROOT-<unset>}"
 
-          echo "ANDROIDNDK=${ANDROIDNDK-<unset>}"
+          # ========================================================
+          # CRITICAL TEST:
+          # Confirm Python sees P4A_REPORTLAB_DIR
+          # ========================================================
 
           echo ""
-          echo "ReportLab source:"
+          echo "=================================================="
+          echo "PYTHON ENVIRONMENT CHECK"
+          echo "=================================================="
 
-          ls -la "$P4A_REPORTLAB_DIR"
+          python -c '
+          import os
+          path = os.environ.get("P4A_REPORTLAB_DIR")
+          print("P4A_REPORTLAB_DIR =", path)
+          assert path, "P4A_REPORTLAB_DIR is missing"
+          assert os.path.isdir(path), "P4A_REPORTLAB_DIR does not exist"
+          '
 
-          # --------------------------------------------------------
-          # Verify local ReportLab again immediately before build
-          # --------------------------------------------------------
-
-          test -n "$P4A_REPORTLAB_DIR"
-
-          test -d "$P4A_REPORTLAB_DIR"
-
-          # --------------------------------------------------------
-          # Buildozer packages cache
-          # --------------------------------------------------------
-
-          mkdir -p "$HOME/.buildozer/android/packages"
+          # ========================================================
+          # BUILD
+          # ========================================================
 
           echo ""
-
-          du -sh \
-            "$HOME/.buildozer/android/packages" \
-            2>/dev/null || true
-
-          # --------------------------------------------------------
-          # Run Buildozer
-          # --------------------------------------------------------
+          echo "=================================================="
+          echo "STARTING BUILDOZER"
+          echo "=================================================="
 
           set +e
 
@@ -618,13 +681,41 @@ jobs:
 
           set -e
 
-          # --------------------------------------------------------
-          # Extract useful network/download diagnostics
-          # --------------------------------------------------------
+          # ========================================================
+          # REPORTLAB DIAGNOSTIC
+          # ========================================================
 
           echo ""
           echo "=================================================="
-          echo "DOWNLOAD / NETWORK DIAGNOSTICS"
+          echo "REPORTLAB DOWNLOAD CHECK"
+          echo "=================================================="
+
+          if grep -Fq "hg.reportlab.com" buildozer-full.log; then
+            echo ""
+            echo "ERROR: p4a still attempted to download ReportLab."
+            echo ""
+
+            grep -Fn \
+              "hg.reportlab.com" \
+              buildozer-full.log \
+              | tail -n 50
+
+            echo ""
+            echo "P4A_REPORTLAB_DIR=$P4A_REPORTLAB_DIR"
+
+            exit 1
+          fi
+
+          echo "SUCCESS:"
+          echo "No remote ReportLab download detected."
+
+          # ========================================================
+          # NETWORK DIAGNOSTICS
+          # ========================================================
+
+          echo ""
+          echo "=================================================="
+          echo "DOWNLOAD DIAGNOSTICS"
           echo "=================================================="
 
           grep -Ei \
@@ -633,46 +724,9 @@ jobs:
             | tail -n 150 \
             || true
 
-          # --------------------------------------------------------
-          # Check specifically for unwanted ReportLab download
-          # --------------------------------------------------------
-
-          echo ""
-          echo "=================================================="
-          echo "REPORTLAB DOWNLOAD CHECK"
-          echo "=================================================="
-
-          if grep -Fq \
-            "hg.reportlab.com/hg-public/reportlab/archive/fe660f227cac.tar.gz" \
-            buildozer-full.log
-          then
-            echo ""
-            echo "ERREUR : python-for-android a encore essayé"
-            echo "de télécharger ReportLab depuis hg.reportlab.com."
-            echo ""
-            echo "P4A_REPORTLAB_DIR=$P4A_REPORTLAB_DIR"
-            echo ""
-
-            grep -Fn \
-              "hg.reportlab.com" \
-              buildozer-full.log \
-              | tail -n 20
-
-            echo ""
-            echo "Vérifier buildozer.spec :"
-            grep -n \
-              "p4a.local_recipes" \
-              buildozer.spec \
-              || true
-
-            exit 1
-          fi
-
-          echo "Aucun téléchargement ReportLab distant détecté."
-
-          # --------------------------------------------------------
-          # Show final log
-          # --------------------------------------------------------
+          # ========================================================
+          # LAST LOG
+          # ========================================================
 
           echo ""
           echo "=================================================="
@@ -681,12 +735,9 @@ jobs:
 
           tail -n 250 buildozer-full.log
 
-          # --------------------------------------------------------
-          # Return actual Buildozer status
-          # --------------------------------------------------------
-
           exit "$BUILDOZER_STATUS"
 
+          
       # ============================================================
       # 18. VERIFY APK
       # ============================================================
