@@ -15,18 +15,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
       
-      - name: Show python-for-android version
-        run: |
-          cd .buildozer/android/platform/python-for-android
-
-          echo "===== Python-for-Android ====="
-
-          git rev-parse HEAD || true
-
-          git describe --tags --always || true
-
-          git log -1 --oneline || true
-
       - name: Install system dependencies
         run: |
           sudo apt-get update
@@ -67,6 +55,18 @@ jobs:
           key: buildozer-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}
           restore-keys: |
             buildozer-${{ runner.os }}-
+
+      - name: Show python-for-android version
+        run: |
+          cd .buildozer/android/platform/python-for-android
+
+          echo "===== Python-for-Android ====="
+
+          git rev-parse HEAD || true
+
+          git describe --tags --always || true
+
+          git log -1 --oneline || true
 
       - name: Install Android Command Line Tools
         run: |
