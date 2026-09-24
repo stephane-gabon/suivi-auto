@@ -3,7 +3,7 @@ name: Build Android APK
 on:
   push:
     branches:
-    - main
+      - main
   workflow_dispatch:
 
 jobs:
@@ -175,13 +175,58 @@ jobs:
 
           echo "===== Test ReportLab PyPI ====="
 
+          rm -rf "$RUNNER_TEMP/reportlab-test"
+          mkdir -p "$RUNNER_TEMP/reportlab-test"
+
           python3 -m pip download \
             --no-deps \
-            --only-binary=:all: \
             reportlab \
-            -d "$RUNNER_TEMP/reportlab-test" || true
+            -d "$RUNNER_TEMP/reportlab-test"
 
-          ls -la "$RUNNER_TEMP/reportlab-test" || true
+          ls -la "$RUNNER_TEMP/reportlab-test"
+
+      - name: Prepare python-for-android ReportLab workaround
+        shell: bash
+        run: |
+          set -e
+
+          P4A="$HOME/.buildozer/android/platform/python-for-android"
+
+          echo "===== Vérification python-for-android ====="
+          echo "P4A=$P4A"
+
+          if [ ! -d "$P4A" ]; then
+            echo "python-for-android n'est pas encore présent."
+            echo "Buildozer le téléchargera pendant le build."
+            exit 0
+          fi
+
+          echo "===== Recette ReportLab actuelle ====="
+
+          if [ -d "$P4A/pythonforandroid/recipes/reportlab" ]; then
+            echo "Ancienne recette ReportLab détectée."
+
+            grep -R "hg.reportlab.com" \
+              "$P4A/pythonforandroid/recipes/reportlab" \
+              || true
+
+            echo "Suppression de l'ancienne recette ReportLab..."
+
+            rm -rf "$P4A/pythonforandroid/recipes/reportlab"
+
+            echo "Ancienne recette ReportLab supprimée."
+          else
+            echo "Aucune recette ReportLab à supprimer."
+          fi
+
+          echo "===== Vérification ====="
+
+          if [ -d "$P4A/pythonforandroid/recipes/reportlab" ]; then
+            echo "ERREUR: la recette ReportLab existe encore."
+            exit 1
+          fi
+
+          echo "ReportLab sera installé depuis PyPI par python-for-android."
 
       - name: Clean previous Android build
         shell: bash
@@ -190,6 +235,40 @@ jobs:
 
           rm -rf .buildozer/android/platform/build-*
           rm -rf .buildozer/android/platform/dists
+
+      - name: Prepare Buildozer python-for-android
+        shell: bash
+        run: |
+          set -e
+
+          P4A="$HOME/.buildozer/android/platform/python-for-android"
+
+          echo "===== Préparation python-for-android utilisé par Buildozer ====="
+
+          if [ ! -d "$P4A" ]; then
+            echo "python-for-android n'existe pas encore."
+            echo "Initialisation de Buildozer pour récupérer python-for-android..."
+
+            buildozer android debug --help >/dev/null 2>&1 || true
+          fi
+
+          if [ -d "$P4A/pythonforandroid/recipes/reportlab" ]; then
+            echo "Suppression de la recette ReportLab..."
+
+            rm -rf "$P4A/pythonforandroid/recipes/reportlab"
+          fi
+
+          echo "===== Vérification finale ====="
+
+          test -d "$P4A/pythonforandroid"
+
+          if [ -d "$P4A/pythonforandroid/recipes/reportlab" ]; then
+            echo "ERREUR: recette ReportLab encore présente."
+            exit 1
+          fi
+
+          echo "python-for-android OK"
+          echo "ReportLab recipe désactivée."
 
       - name: Build APK
         shell: bash
@@ -201,12 +280,13 @@ jobs:
           export ANDROIDSDK="$HOME/.buildozer/android/platform/android-sdk"
           export ANDROID_HOME="$ANDROIDSDK"
 
-          export PATH="$ANDROIDSDK/cmdline-tools/latest/bin:$ANDROIDSDK/platform-tools:$PATH"
+          export PATH="$ANDROIDSDK/tools/bin:$ANDROIDSDK/cmdline-tools/latest/bin:$ANDROIDSDK/platform-tools:$PATH"
 
           echo "===== Environment ====="
           echo "ANDROIDSDK=$ANDROIDSDK"
           echo "ANDROIDAPI=${ANDROIDAPI:-33}"
           echo "ANDROIDMINAPI=${ANDROIDMINAPI:-24}"
+
           java -version
 
           echo "===== Buildozer ====="
