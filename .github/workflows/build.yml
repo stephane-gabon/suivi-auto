@@ -131,7 +131,7 @@ jobs:
           # -----------------------------------------------------
           yes | "$SDKMANAGER" \
             --sdk_root="$SDK" \
-            --licenses
+            --licenses >/dev/null || true
 
           # -----------------------------------------------------
           # Installation des composants nécessaires
