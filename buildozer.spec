@@ -28,13 +28,15 @@ warn_on_root = 1
 android.api = 33
 android.minapi = 24
 
-android.sdk = 33
 android.ndk = 28c
 android.ndk_api = 24
 
-android.arch = arm64-v8a,armeabi-v7a
+android.archs = arm64-v8a,armeabi-v7a
 
 android.accept_sdk_license = True
+
 android.enable_androidx = True
 
-p4a.local_recipes_dir = %(source.dir)s/recipes
+# Empêche Buildozer de modifier/mettre à jour le SDK
+# après notre installation contrôlée dans GitHub Actions.
+android.skip_update = True
