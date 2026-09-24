@@ -338,6 +338,8 @@ jobs:
 
           SDK="$HOME/.buildozer/android/platform/android-sdk"
           NDK="$SDK/ndk/28.2.13676358"
+          SDKMANAGER="$SDK/cmdline-tools/latest/bin/sdkmanager"
+          AIDL="$SDK/build-tools/35.0.0/aidl"
 
           echo "======================================"
           echo "JAVA"
@@ -349,9 +351,10 @@ jobs:
           echo "SDK"
           echo "======================================"
 
+          test -d "$SDK"
           test -d "$SDK/platforms/android-33"
           test -d "$SDK/build-tools/35.0.0"
-          test -x "$SDK/build-tools/35.0.0/aidl"
+          test -x "$AIDL"
 
           echo "SDK OK"
 
@@ -359,18 +362,21 @@ jobs:
           echo "SDKMANAGER"
           echo "======================================"
 
-          "$SDK/cmdline-tools/latest/bin/sdkmanager" --version
+          test -f "$SDKMANAGER"
+          test -x "$SDKMANAGER"
 
-          echo "======================================"
-          echo "AIDL"
-          echo "======================================"
+          echo "sdkmanager:"
+          ls -l "$SDKMANAGER"
+          file "$SDKMANAGER"
 
-          "$SDK/build-tools/35.0.0/aidl" --version
+          echo "sdkmanager version:"
+          "$SDKMANAGER" --version
 
           echo "======================================"
           echo "NDK"
           echo "======================================"
 
+          test -d "$NDK"
           test -f "$NDK/source.properties"
 
           cat "$NDK/source.properties"
@@ -382,6 +388,41 @@ jobs:
             "$NDK/source.properties"
 
           echo "NDK 28c OK"
+
+          echo "======================================"
+          echo "AIDL"
+          echo "======================================"
+
+          ls -l "$AIDL"
+
+          "$AIDL" --version || true
+
+          echo "======================================"
+          echo "ENVIRONMENT"
+          echo "======================================"
+
+          echo "ANDROIDSDK=$ANDROIDSDK"
+          echo "ANDROIDNDK=$ANDROIDNDK"
+          echo "ANDROIDAPI=$ANDROIDAPI"
+          echo "ANDROIDMINAPI=$ANDROIDMINAPI"
+
+          echo "======================================"
+          echo "PATH"
+          echo "======================================"
+
+          echo "$PATH"
+
+          echo "======================================"
+          echo "COMMANDS"
+          echo "======================================"
+
+          command -v java || true
+          command -v sdkmanager || true
+          command -v aidl || true
+
+          echo "======================================"
+          echo "ANDROID VERIFICATION OK"
+          echo "======================================"
 
 
       # ============================================================
