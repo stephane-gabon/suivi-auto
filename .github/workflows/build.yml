@@ -1,3 +1,4 @@
+```yaml
 name: Build Android APK
 
 on:
@@ -14,10 +15,9 @@ jobs:
       ANDROID_API: "33"
       ANDROID_BUILD_TOOLS: "35.0.0"
       ANDROID_NDK: "28c"
-      REPORTLAB_VERSION: "fe660f227cac"
-      REPORTLAB_ARCHIVE: "p4a-recipes/reportlab/reportlab-fe660f227cac.tar.gz"
 
     steps:
+
       # ============================================================
       # 1. Checkout
       # ============================================================
@@ -42,14 +42,17 @@ jobs:
           java-version: "17"
 
       # ============================================================
-      # 4. Python dependencies
+      # 4. Python build dependencies
       # ============================================================
       - name: Install Python build dependencies
         shell: bash
         run: |
           set -euo pipefail
 
-          python -m pip install --upgrade pip setuptools wheel
+          python -m pip install --upgrade \
+            pip \
+            setuptools \
+            wheel
 
           pip install \
             buildozer==1.6.0 \
@@ -69,11 +72,12 @@ jobs:
 
           echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
           echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
+
           echo "$SDK/platform-tools" >> "$GITHUB_PATH"
           echo "$SDK/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
 
       # ============================================================
-      # 6. Download Android command line tools
+      # 6. Android command line tools
       # ============================================================
       - name: Install Android command line tools
         shell: bash
@@ -95,12 +99,14 @@ jobs:
           unzip -q commandlinetools.zip
 
           rm -rf "$SDK/cmdline-tools/latest"
+
           mkdir -p "$SDK/cmdline-tools/latest"
 
-          cp -a cmdline-tools/. "$SDK/cmdline-tools/latest/"
+          cp -a cmdline-tools/. \
+            "$SDK/cmdline-tools/latest/"
 
-          echo "sdkmanager:"
-          "$SDK/cmdline-tools/latest/bin/sdkmanager" --version
+          "$SDK/cmdline-tools/latest/bin/sdkmanager" \
+            --version
 
       # ============================================================
       # 7. Legacy sdkmanager compatibility
@@ -172,68 +178,61 @@ jobs:
           test -x \
             "$SDK/build-tools/${ANDROID_BUILD_TOOLS}/aapt"
 
+          echo
           echo "adb:"
           "$SDK/platform-tools/adb" version
 
+          echo
           echo "aapt:"
-          "$SDK/build-tools/${ANDROID_BUILD_TOOLS}/aapt" version
+          "$SDK/build-tools/${ANDROID_BUILD_TOOLS}/aapt version"
 
       # ============================================================
-      # 11. Cache Buildozer downloads
+      # 11. Clean all previous Buildozer state
       # ============================================================
-      - name: Cache Buildozer Android packages
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.buildozer/android/packages
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: buildozer-android-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}
-          restore-keys: |
-            buildozer-android-${{ runner.os }}-
+      - name: Clean Buildozer
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          rm -rf "$HOME/.buildozer"
+          rm -rf "$GITHUB_WORKSPACE/.buildozer"
+          rm -rf "$GITHUB_WORKSPACE/bin"
+
+          mkdir -p "$HOME/.buildozer"
 
       # ============================================================
-      # 12. Verify ReportLab recipe
+      # 12. Verify local ReportLab recipe
       # ============================================================
       - name: Verify ReportLab recipe
         shell: bash
         run: |
           set -euo pipefail
 
-          echo "=== ReportLab recipe ==="
-          test -f p4a-recipes/reportlab/__init__.py
-          cat p4a-recipes/reportlab/__init__.py
+          RECIPE="$GITHUB_WORKSPACE/p4a-recipes/reportlab/__init__.py"
+          ARCHIVE="$GITHUB_WORKSPACE/p4a-recipes/reportlab/reportlab-fe660f227cac.tar.gz"
+
+          echo "=== Recipe ==="
+
+          test -f "$RECIPE"
+          cat "$RECIPE"
 
           echo
-          echo "=== ReportLab archive ==="
-          test -f "$REPORTLAB_ARCHIVE"
-          ls -lh "$REPORTLAB_ARCHIVE"
+          echo "=== Archive ==="
+
+          test -f "$ARCHIVE"
+          test -s "$ARCHIVE"
+
+          ls -lh "$ARCHIVE"
+
+          echo
+          echo "=== SHA256 ==="
+
+          sha256sum "$ARCHIVE"
 
       # ============================================================
-      # 13. Prepare local ReportLab archive
+      # 13. Validate ReportLab recipe syntax
       # ============================================================
-      - name: Prepare local ReportLab archive
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          mkdir -p "$HOME/.buildozer"
-
-          cp \
-            "$GITHUB_WORKSPACE/$REPORTLAB_ARCHIVE" \
-            "$HOME/.buildozer/reportlab-${REPORTLAB_VERSION}.tar.gz"
-
-          test -s \
-            "$HOME/.buildozer/reportlab-${REPORTLAB_VERSION}.tar.gz"
-
-          echo "Local ReportLab archive:"
-          ls -lh \
-            "$HOME/.buildozer/reportlab-${REPORTLAB_VERSION}.tar.gz"
-
-      # ============================================================
-      # 14. Verify ReportLab recipe syntax
-      # ============================================================
-      - name: Validate ReportLab recipe Python syntax
+      - name: Validate ReportLab recipe
         shell: bash
         run: |
           set -euo pipefail
@@ -244,7 +243,7 @@ jobs:
           echo "ReportLab recipe syntax OK."
 
       # ============================================================
-      # 15. Verify buildozer.spec
+      # 14. Verify buildozer.spec
       # ============================================================
       - name: Verify buildozer.spec
         shell: bash
@@ -253,24 +252,18 @@ jobs:
 
           test -f buildozer.spec
 
-          echo "=== Relevant buildozer.spec settings ==="
+          echo "=== buildozer.spec ==="
+          cat buildozer.spec
+
+          echo
+          echo "=== ReportLab configuration ==="
+
           grep -E \
-            '^(requirements|p4a\.local_recipes|requirements\.source\.)' \
-            buildozer.spec || true
+            '^(requirements|p4a\.local_recipes)' \
+            buildozer.spec
 
       # ============================================================
-      # 16. Clean previous Buildozer project build
-      # ============================================================
-      - name: Clean Buildozer project directory
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          rm -rf .buildozer
-          rm -rf bin
-
-      # ============================================================
-      # 17. Build APK
+      # 15. Build APK
       # ============================================================
       - name: Build Android APK
         shell: bash
@@ -279,10 +272,11 @@ jobs:
 
           mkdir -p build_logs
 
-          buildozer -v android debug 2>&1 | tee build_logs/buildozer.log
+          buildozer -v android debug 2>&1 | \
+            tee build_logs/buildozer.log
 
       # ============================================================
-      # 18. Verify APK
+      # 16. Verify APK
       # ============================================================
       - name: Verify APK
         shell: bash
@@ -290,9 +284,13 @@ jobs:
           set -euo pipefail
 
           echo "=== bin/ ==="
+
           ls -lah bin/
 
-          APK_COUNT=$(find bin -maxdepth 1 -type f -name "*.apk" | wc -l)
+          APK_COUNT=$(find bin \
+            -maxdepth 1 \
+            -type f \
+            -name "*.apk" | wc -l)
 
           if [ "$APK_COUNT" -eq 0 ]; then
             echo "ERROR: No APK was generated."
@@ -301,10 +299,15 @@ jobs:
 
           echo
           echo "APK generated successfully:"
-          find bin -maxdepth 1 -type f -name "*.apk" -print
+
+          find bin \
+            -maxdepth 1 \
+            -type f \
+            -name "*.apk" \
+            -print
 
       # ============================================================
-      # 19. Make sure the old ReportLab server was not used
+      # 17. Verify ReportLab source
       # ============================================================
       - name: Verify ReportLab source
         if: always()
@@ -313,8 +316,14 @@ jobs:
           set -euo pipefail
 
           if [ -f build_logs/buildozer.log ]; then
-            if grep -q "hg.reportlab.com" build_logs/buildozer.log; then
-              echo "ERROR: Build attempted to download ReportLab from hg.reportlab.com"
+
+            if grep -q "hg.reportlab.com" \
+              build_logs/buildozer.log; then
+
+              echo "ERROR:"
+              echo "Build attempted to download ReportLab"
+              echo "from hg.reportlab.com"
+
               exit 1
             fi
 
@@ -322,7 +331,7 @@ jobs:
           fi
 
       # ============================================================
-      # 20. Upload APK
+      # 18. Upload APK
       # ============================================================
       - name: Upload APK artifact
         if: success()
@@ -333,7 +342,7 @@ jobs:
           if-no-files-found: error
 
       # ============================================================
-      # 21. Upload build log if build fails
+      # 19. Upload build logs
       # ============================================================
       - name: Upload build logs
         if: always()
@@ -342,3 +351,4 @@ jobs:
           name: suivi-auto-build-logs
           path: build_logs/
           if-no-files-found: warn
+```
