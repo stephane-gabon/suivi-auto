@@ -1,4 +1,3 @@
-```ini
 [app]
 
 title = Suivi Auto
@@ -37,4 +36,5 @@ android.arch = arm64-v8a,armeabi-v7a
 
 android.accept_android_sdk_license = True
 android.enable_androidx = True
-```
+
+
