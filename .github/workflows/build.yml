@@ -148,6 +148,9 @@ jobs:
           export JAVA_HOME="/usr/lib/jvm/java-17-openjdk-amd64"
           export PATH="$JAVA_HOME/bin:$SDK/tools/bin:$SDK/cmdline-tools/latest/bin:$SDK/platform-tools:$PATH"
 
+          echo "===== JAVA ====="
+          java -version
+
           echo "===== SDKMANAGER ====="
           "$SDK/tools/bin/sdkmanager" --version
 
@@ -155,15 +158,39 @@ jobs:
           ls -la "$SDK/build-tools"
 
           echo "===== AIDL ====="
-          ls -l "$SDK/build-tools/33.0.2/aidl"
 
-          "$SDK/build-tools/33.0.2/aidl" --version
+          if [ ! -f "$SDK/build-tools/33.0.2/aidl" ]; then
+            echo "ERREUR : AIDL introuvable"
+            exit 1
+          fi
 
-          echo "===== PLATFORM ====="
-          ls -la "$SDK/platforms/android-33"
+          if [ ! -x "$SDK/build-tools/33.0.2/aidl" ]; then
+            echo "ERREUR : AIDL n'est pas exécutable"
+            exit 1
+          fi
+
+          echo "AIDL trouvé :"
+          ls -lh "$SDK/build-tools/33.0.2/aidl"
+
+          echo "AIDL OK"
+
+          echo "===== PLATFORM ANDROID 33 ====="
+
+          if [ ! -d "$SDK/platforms/android-33" ]; then
+            echo "ERREUR : Android Platform 33 introuvable"
+            exit 1
+          fi
+
+          echo "Android Platform 33 OK"
 
           echo "===== NDK ====="
-          ls -la "$SDK/ndk/28.0.13004108"
+
+          if [ ! -d "$SDK/ndk/28.0.13004108" ]; then
+            echo "ERREUR : NDK introuvable"
+            exit 1
+          fi
+
+          echo "NDK 28 OK"
 
       - name: Build APK
         env:
