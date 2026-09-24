@@ -14,7 +14,6 @@ jobs:
       ANDROID_API: "33"
       ANDROID_MIN_API: "24"
       ANDROID_BUILD_TOOLS: "35.0.0"
-      ANDROID_NDK_VERSION: "28.2.13676358"
       JAVA_VERSION: "17"
 
     steps:
@@ -53,6 +52,7 @@ jobs:
 
           sudo apt-get install -y \
             git \
+            wget \
             zip \
             unzip \
             autoconf \
@@ -77,7 +77,7 @@ jobs:
             cython==0.29.37
 
       # ---------------------------------------------------------
-      # 6. Initialisation Buildozer
+      # 6. Initialisation / nettoyage Buildozer
       # ---------------------------------------------------------
       - name: Initialize Buildozer Android environment
         run: |
@@ -86,7 +86,7 @@ jobs:
           buildozer android clean || true
 
       # ---------------------------------------------------------
-      # 7. Déterminer le SDK Buildozer
+      # 7. Configuration Android SDK
       # ---------------------------------------------------------
       - name: Configure Android SDK environment
         run: |
@@ -104,12 +104,22 @@ jobs:
           echo "ANDROIDMINAPI=${ANDROID_MIN_API}" >> "$GITHUB_ENV"
 
           echo "$SDK/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
+          echo "$SDK/tools/bin" >> "$GITHUB_PATH"
           echo "$SDK/platform-tools" >> "$GITHUB_PATH"
           echo "$SDK/build-tools/${ANDROID_BUILD_TOOLS}" >> "$GITHUB_PATH"
 
+          echo
+          echo "=========================================="
+          echo "Android SDK configuration"
+          echo "=========================================="
+          echo "ANDROIDSDK=$SDK"
+          echo "ANDROID_HOME=$SDK"
+          echo "ANDROID_SDK_ROOT=$SDK"
+          echo "ANDROIDAPI=${ANDROID_API}"
+          echo "ANDROIDMINAPI=${ANDROID_MIN_API}"
 
       # ---------------------------------------------------------
-      # 8. Installer Android SDK Command Line Tools
+      # 8. Installer Android Command Line Tools
       # ---------------------------------------------------------
       - name: Install Android SDK components
         run: |
@@ -118,6 +128,11 @@ jobs:
           SDK="$ANDROID_SDK_ROOT"
           CMDLINE_TOOLS="$SDK/cmdline-tools/latest"
           SDKMANAGER="$CMDLINE_TOOLS/bin/sdkmanager"
+
+          echo
+          echo "=========================================="
+          echo "Installation Android Command Line Tools"
+          echo "=========================================="
 
           echo "SDK = $SDK"
           echo "SDKMANAGER = $SDKMANAGER"
@@ -133,27 +148,30 @@ jobs:
             -O /tmp/commandlinetools.zip
 
           # -----------------------------------------------------
-          # Installation
+          # Installer les outils
           # -----------------------------------------------------
 
           rm -rf "$CMDLINE_TOOLS"
+
           mkdir -p "$CMDLINE_TOOLS"
 
           unzip -q \
             /tmp/commandlinetools.zip \
             -d "$CMDLINE_TOOLS"
 
-          # Google fournit l'archive avec un dossier :
+          # L'archive Google contient :
           #
           # cmdline-tools/
           #   bin/
           #   lib/
+          #   source.properties
           #
           # On veut :
           #
           # latest/
           #   bin/
           #   lib/
+          #   source.properties
 
           if [ -d "$CMDLINE_TOOLS/cmdline-tools" ]; then
             mv "$CMDLINE_TOOLS/cmdline-tools/"* \
@@ -165,7 +183,7 @@ jobs:
           chmod +x "$SDKMANAGER"
 
           # -----------------------------------------------------
-          # Vérification
+          # Vérifier sdkmanager
           # -----------------------------------------------------
 
           echo
@@ -187,62 +205,138 @@ jobs:
 
           # -----------------------------------------------------
           # Installer les composants Android
+          #
+          # Le NDK n'est volontairement PAS installé ici.
+          # python-for-android détecte et installe lui-même
+          # la version recommandée (actuellement r28c).
           # -----------------------------------------------------
+
+          echo
+          echo "=========================================="
+          echo "Installation des composants Android"
+          echo "=========================================="
 
           "$SDKMANAGER" \
             --sdk_root="$SDK" \
             "platform-tools" \
             "platforms;android-${ANDROID_API}" \
-            "build-tools;${ANDROID_BUILD_TOOLS}" \
-            "ndk;${ANDROID_NDK_VERSION}"
+            "build-tools;${ANDROID_BUILD_TOOLS}"
 
           # -----------------------------------------------------
-          # Vérifications finales
+          # Vérifications
           # -----------------------------------------------------
-
-          test -d "$SDK/platforms/android-${ANDROID_API}"
-          test -d "$SDK/build-tools/${ANDROID_BUILD_TOOLS}"
-          test -d "$SDK/ndk/${ANDROID_NDK_VERSION}"
-          test -x "$SDK/build-tools/${ANDROID_BUILD_TOOLS}/aidl"
 
           echo
           echo "=========================================="
-          echo "Android SDK correctement installé"
+          echo "Vérifications Android SDK"
           echo "=========================================="
 
-          echo "sdkmanager:"
+          test -d "$SDK/platforms/android-${ANDROID_API}"
+
+          test -d "$SDK/build-tools/${ANDROID_BUILD_TOOLS}"
+
+          test -x "$SDK/build-tools/${ANDROID_BUILD_TOOLS}/aidl"
+
+          test -d "$SDK/platform-tools"
+
+          echo
+          echo "SDK Manager :"
           "$SDKMANAGER" --version
 
-          echo "NDK:"
-          ls -ld "$SDK/ndk/${ANDROID_NDK_VERSION}"
+          echo
+          echo "Android Platform :"
+          ls -ld "$SDK/platforms/android-${ANDROID_API}"
 
-          echo "Build Tools:"
+          echo
+          echo "Build Tools :"
           ls -ld "$SDK/build-tools/${ANDROID_BUILD_TOOLS}"
 
-          
+          echo
+          echo "Platform Tools :"
+          ls -ld "$SDK/platform-tools"
+
       # ---------------------------------------------------------
-      # 9. Vérifier la recette ReportLab locale
+      # 9. Compatibilité sdkmanager avec python-for-android
+      # ---------------------------------------------------------
+      - name: Configure sdkmanager compatibility
+        run: |
+          set -euxo pipefail
+
+          SDK="$ANDROID_SDK_ROOT"
+
+          MODERN_SDKMANAGER="$SDK/cmdline-tools/latest/bin/sdkmanager"
+          LEGACY_DIR="$SDK/tools/bin"
+          LEGACY_SDKMANAGER="$LEGACY_DIR/sdkmanager"
+
+          echo
+          echo "=========================================="
+          echo "Configuration compatibilité sdkmanager"
+          echo "=========================================="
+
+          echo "SDK = $SDK"
+          echo "sdkmanager moderne = $MODERN_SDKMANAGER"
+          echo "sdkmanager legacy = $LEGACY_SDKMANAGER"
+
+          # Vérifier le sdkmanager moderne
+          test -x "$MODERN_SDKMANAGER"
+
+          # Créer le chemin attendu par certaines versions
+          # de python-for-android
+          mkdir -p "$LEGACY_DIR"
+
+          # Créer un lien symbolique
+          ln -sf \
+            "$MODERN_SDKMANAGER" \
+            "$LEGACY_SDKMANAGER"
+
+          # -----------------------------------------------------
+          # Vérification
+          # -----------------------------------------------------
+
+          echo
+          echo "Contenu de tools/bin :"
+
+          ls -la "$LEGACY_DIR"
+
+          echo
+          echo "Test sdkmanager via chemin legacy :"
+
+          "$LEGACY_SDKMANAGER" --version
+
+          echo
+          echo "sdkmanager legacy correctement configuré."
+
+      # ---------------------------------------------------------
+      # 10. Vérifier la recette ReportLab locale
       # ---------------------------------------------------------
       - name: Verify local ReportLab recipe
         run: |
           set -euxo pipefail
 
-          echo "Vérification de la recette ReportLab..."
+          echo
+          echo "=========================================="
+          echo "Vérification recette ReportLab"
+          echo "=========================================="
 
           test -f p4a-recipes/reportlab/__init__.py
-          test -f p4a-recipes/reportlab/reportlab-fe660f227cac.tar.gz
+
+          test -f \
+            p4a-recipes/reportlab/reportlab-fe660f227cac.tar.gz
 
           echo
           echo "Archive ReportLab :"
+
           ls -lh \
             p4a-recipes/reportlab/reportlab-fe660f227cac.tar.gz
 
           echo
           echo "Recette ReportLab :"
-          sed -n '1,200p' p4a-recipes/reportlab/__init__.py
+
+          sed -n '1,200p' \
+            p4a-recipes/reportlab/__init__.py
 
       # ---------------------------------------------------------
-      # 10. Nettoyage complet du précédent environnement p4a
+      # 11. Nettoyage des répertoires Buildozer du projet
       # ---------------------------------------------------------
       - name: Clean Buildozer build directories
         run: |
@@ -254,7 +348,61 @@ jobs:
           mkdir -p bin
 
       # ---------------------------------------------------------
-      # 11. Reconstruction
+      # 12. Vérification finale de l'environnement Android
+      # ---------------------------------------------------------
+      - name: Verify Android environment before Buildozer
+        run: |
+          set -euxo pipefail
+
+          SDK="$ANDROID_SDK_ROOT"
+
+          echo
+          echo "=========================================="
+          echo "Environnement Android final"
+          echo "=========================================="
+
+          echo
+          echo "ANDROIDSDK:"
+          echo "$ANDROIDSDK"
+
+          echo
+          echo "ANDROID_HOME:"
+          echo "$ANDROID_HOME"
+
+          echo
+          echo "ANDROID_SDK_ROOT:"
+          echo "$ANDROID_SDK_ROOT"
+
+          echo
+          echo "sdkmanager moderne:"
+          "$SDK/cmdline-tools/latest/bin/sdkmanager" --version
+
+          echo
+          echo "sdkmanager legacy:"
+          "$SDK/tools/bin/sdkmanager" --version
+
+          echo
+          echo "AIDL:"
+          "$SDK/build-tools/${ANDROID_BUILD_TOOLS}/aidl" --help >/dev/null
+
+          echo
+          echo "Java:"
+          java -version
+
+          echo
+          echo "Python:"
+          python --version
+
+          echo
+          echo "Cython:"
+          cython --version
+
+          echo
+          echo "Buildozer:"
+          buildozer --version
+
+      # ---------------------------------------------------------
+      # 13. Construction APK
       # ---------------------------------------------------------
       - name: Build Android APK
         run: |
@@ -267,15 +415,28 @@ jobs:
           export ANDROIDAPI="$ANDROID_API"
           export ANDROIDMINAPI="$ANDROID_MIN_API"
 
+          export PATH="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$ANDROID_SDK_ROOT/tools/bin:$ANDROID_SDK_ROOT/platform-tools:$ANDROID_SDK_ROOT/build-tools/${ANDROID_BUILD_TOOLS}:$PATH"
+
+          echo
+          echo "=========================================="
+          echo "Lancement Buildozer"
+          echo "=========================================="
+
           buildozer -v android debug
 
       # ---------------------------------------------------------
-      # 12. Vérifier que l'APK existe
+      # 14. Vérifier que l'APK existe
       # ---------------------------------------------------------
       - name: Verify APK
         run: |
           set -euxo pipefail
 
+          echo
+          echo "=========================================="
+          echo "Vérification APK"
+          echo "=========================================="
+
+          echo
           echo "Contenu de bin/ :"
 
           find bin \
@@ -286,6 +447,7 @@ jobs:
           APK="$(find bin -type f -name '*.apk' -print -quit)"
 
           if [ -z "$APK" ]; then
+            echo
             echo "ERREUR : aucun APK généré."
             exit 1
           fi
@@ -294,10 +456,12 @@ jobs:
           echo "APK généré :"
           echo "$APK"
 
+          echo
+          echo "Taille :"
           ls -lh "$APK"
 
       # ---------------------------------------------------------
-      # 13. Publier l'APK comme artefact GitHub
+      # 15. Publier l'APK comme artefact GitHub
       # ---------------------------------------------------------
       - name: Upload APK
         uses: actions/upload-artifact@v4
@@ -305,4 +469,3 @@ jobs:
           name: suivi-auto-apk
           path: bin/*.apk
           if-no-files-found: error
-
