@@ -18,10 +18,12 @@ icon.filename = %(source.dir)s/icon.png
 
 android.permissions = CAMERA,READ_EXTERNAL_STORAGE,WRITE_EXTERNAL_STORAGE,POST_NOTIFICATIONS
 
+
 [buildozer]
 
 log_level = 2
 warn_on_root = 1
+
 
 [android]
 
@@ -36,5 +38,4 @@ android.arch = arm64-v8a,armeabi-v7a
 
 android.accept_android_sdk_license = True
 android.enable_androidx = True
-
 
