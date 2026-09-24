@@ -30,5 +30,5 @@ android.sdk_build_tools = 35.0.0
 android.ndk = 28c
 android.archs = arm64-v8a,armeabi-v7a
 
-p4a.local_recipes_dir = p4a-recipes
+p4a.local_recipes = p4a-recipes
 
