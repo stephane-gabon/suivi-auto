@@ -277,6 +277,49 @@ jobs:
 
 
       # ============================================================
+      # . COMPATIBILITE BUILDOZER / SDKMANAGER
+      # ============================================================
+      - name: Configure sdkmanager compatibility
+        shell: bash
+        run: |
+          set -euxo pipefail
+
+          SDK="$HOME/.buildozer/android/platform/android-sdk"
+          MODERN_SDKMANAGER="$SDK/cmdline-tools/latest/bin/sdkmanager"
+          LEGACY_DIR="$SDK/tools/bin"
+          LEGACY_SDKMANAGER="$LEGACY_DIR/sdkmanager"
+
+          echo "======================================"
+          echo "SDKMANAGER COMPATIBILITY"
+          echo "======================================"
+
+          test -x "$MODERN_SDKMANAGER"
+
+          mkdir -p "$LEGACY_DIR"
+
+          rm -f "$LEGACY_SDKMANAGER"
+
+          ln -s \
+            "$MODERN_SDKMANAGER" \
+            "$LEGACY_SDKMANAGER"
+
+          echo "Ancien chemin attendu par p4a :"
+          echo "$LEGACY_SDKMANAGER"
+
+          echo
+          echo "Cible :"
+          readlink -f "$LEGACY_SDKMANAGER"
+
+          echo
+          echo "Verification :"
+          test -x "$LEGACY_SDKMANAGER"
+
+          "$LEGACY_SDKMANAGER" --version
+
+          echo
+          echo "sdkmanager compatible Buildozer OK."
+
+      # ============================================================
       # 11. INSTALLATION NDK 28c
       # ============================================================
       - name: Install Android NDK 28c
@@ -561,7 +604,7 @@ jobs:
           export ANDROIDAPI=33
           export ANDROIDMINAPI=24
 
-          export PATH="$SDK/cmdline-tools/latest/bin:$SDK/platform-tools:$SDK/build-tools/35.0.0:$PATH"
+          export PATH="$SDK/cmdline-tools/latest/bin:$SDK/platform-tools:$SDK/build-tools/35.0.0:$SDK/tools/bin:$PATH"
 
           echo "======================================"
           echo "BUILD ANDROID"
@@ -579,34 +622,33 @@ jobs:
           test -d "$SDK/platforms/android-33"
           test -d "$SDK/build-tools/35.0.0"
 
+          echo "SDK OK"
+
+          echo
+          echo "sdkmanager:"
+          "$SDK/tools/bin/sdkmanager" --version
+
           echo
           echo "NDK:"
           grep -E 'Pkg.Revision|Pkg.ReleaseName' \
             "$NDK/source.properties"
 
           echo
-          echo "AIDL:"
-          "$SDK/build-tools/35.0.0/aidl" --version || true
-
-          echo
-          echo "Recipe ReportLab:"
+          echo "ReportLab recipe:"
           test -f recipes/reportlab/__init__.py
-          echo "OK"
 
           echo
           echo "Architecture:"
-          grep -E '^android\.archs' buildozer.spec || true
+          grep -E '^android\.archs' buildozer.spec
 
           echo
           echo "Requirements:"
-          grep '^requirements' buildozer.spec || true
+          grep '^requirements' buildozer.spec
 
           echo
           echo "Lancement Buildozer..."
-          echo
 
           buildozer -v android debug
-
 
       # ============================================================
       # 19. VERIFICATION APK
