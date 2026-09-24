@@ -15,6 +15,7 @@ orientation = portrait
 
 fullscreen = 0
 
+p4a.local_recipes = p4a-recipes
 
 [buildozer]
 
@@ -30,5 +31,5 @@ android.sdk_build_tools = 35.0.0
 android.ndk = 28c
 android.archs = arm64-v8a,armeabi-v7a
 
-p4a.local_recipes = p4a-recipes
+
 
