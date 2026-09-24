@@ -376,15 +376,15 @@ jobs:
       # ------------------------------------------------------------
       # 15. Nettoyer uniquement les anciens builds
       # ------------------------------------------------------------
-      - name: Clean previous build
-        shell: bash
-        run: |
-          set -euxo pipefail
-
-          rm -rf .buildozer/android/platform/build-*
-          rm -rf .buildozer/android/platform/dists
-
-          echo "Ancien build supprimé."
+      #- name: Clean previous build
+       # shell: bash
+      #  run: |
+      #    set -euxo pipefail
+#
+      #    rm -rf .buildozer/android/platform/build-*
+       #   rm -rf .buildozer/android/platform/dists
+#
+       #   echo "Ancien build supprimé."
 
 
       # ------------------------------------------------------------
