@@ -183,13 +183,13 @@ jobs:
 
           yes | "$SDKMANAGER" \
             --sdk_root="$SDK" \
-            --licenses >/dev/null || true
+            --licenses >/dev/null 2>&1 || true
 
           # -----------------------------------------------------
           # Installer les composants Android
           # -----------------------------------------------------
 
-          yes | "$SDKMANAGER" \
+          "$SDKMANAGER" \
             --sdk_root="$SDK" \
             "platform-tools" \
             "platforms;android-${ANDROID_API}" \
