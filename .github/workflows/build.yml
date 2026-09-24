@@ -252,6 +252,7 @@ jobs:
           "$SDK/build-tools/35.0.0/aidl" --version || true
 
 
+
       # ============================================================
       # 11. INSTALLER NDK 28c
       # ============================================================
@@ -261,4 +262,317 @@ jobs:
           set -euxo pipefail
 
           SDK="$HOME/.buildozer/android/platform/android-sdk"
+          SDKMANAGER="$SDK/cmdline-tools/latest/bin/sdkmanager"
+          NDK="$SDK/ndk/28.2.13676358"
+
+          echo "======================================"
+          echo "INSTALLATION NDK 28c"
+          echo "======================================"
+
+          "$SDKMANAGER" \
+            --sdk_root="$SDK" \
+            "ndk;28.2.13676358"
+
+          echo "======================================"
+          echo "VERIFICATION NDK"
+          echo "======================================"
+
+          test -d "$NDK"
+          test -f "$NDK/source.properties"
+
+          cat "$NDK/source.properties"
+
+          grep -q "Pkg.Revision = 28.2.13676358" \
+            "$NDK/source.properties"
+
+          grep -q "Pkg.ReleaseName = r28c" \
+            "$NDK/source.properties"
+
+          echo "NDK 28c correctement installé."
+
+
+      # ============================================================
+      # 12. CONFIGURATION NDK FINALE
+      # ============================================================
+      - name: Configure final Android environment
+        shell: bash
+        run: |
+          set -euxo pipefail
+
+          SDK="$HOME/.buildozer/android/platform/android-sdk"
+          NDK="$SDK/ndk/28.2.13676358"
+
+          echo "ANDROIDSDK=$SDK" >> "$GITHUB_ENV"
+          echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
+
+          echo "ANDROIDNDK=$NDK" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK=$NDK" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_HOME=$NDK" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_ROOT=$NDK" >> "$GITHUB_ENV"
+
+          echo "ANDROIDAPI=33" >> "$GITHUB_ENV"
+          echo "ANDROIDMINAPI=24" >> "$GITHUB_ENV"
+
+          echo "$SDK/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
+          echo "$SDK/platform-tools" >> "$GITHUB_PATH"
+          echo "$SDK/build-tools/35.0.0" >> "$GITHUB_PATH"
+
+          echo "======================================"
+          echo "ENVIRONNEMENT ANDROID FINAL"
+          echo "======================================"
+
+          echo "ANDROIDSDK=$SDK"
+          echo "ANDROIDNDK=$NDK"
+          echo "ANDROIDAPI=33"
+          echo "ANDROIDMINAPI=24"
+
+
+      # ============================================================
+      # 13. VERIFICATION COMPLETE ANDROID
+      # ============================================================
+      - name: Verify Android environment
+        shell: bash
+        run: |
+          set -euxo pipefail
+
+          SDK="$HOME/.buildozer/android/platform/android-sdk"
+          NDK="$SDK/ndk/28.2.13676358"
+
+          echo "======================================"
+          echo "JAVA"
+          echo "======================================"
+
+          java -version
+
+          echo "======================================"
+          echo "SDK"
+          echo "======================================"
+
+          test -d "$SDK/platforms/android-33"
+          test -d "$SDK/build-tools/35.0.0"
+          test -x "$SDK/build-tools/35.0.0/aidl"
+
+          echo "SDK OK"
+
+          echo "======================================"
+          echo "SDKMANAGER"
+          echo "======================================"
+
+          "$SDK/cmdline-tools/latest/bin/sdkmanager" --version
+
+          echo "======================================"
+          echo "AIDL"
+          echo "======================================"
+
+          "$SDK/build-tools/35.0.0/aidl" --version
+
+          echo "======================================"
+          echo "NDK"
+          echo "======================================"
+
+          test -f "$NDK/source.properties"
+
+          cat "$NDK/source.properties"
+
+          grep -q "Pkg.Revision = 28.2.13676358" \
+            "$NDK/source.properties"
+
+          grep -q "Pkg.ReleaseName = r28c" \
+            "$NDK/source.properties"
+
+          echo "NDK 28c OK"
+
+
+      # ============================================================
+      # 14. VERIFIER LE RECIPE REPORTLAB
+      # ============================================================
+      - name: Verify ReportLab recipe
+        shell: bash
+        run: |
+          set -euxo pipefail
+
+          echo "======================================"
+          echo "REPORTLAB RECIPE"
+          echo "======================================"
+
+          test -f recipes/reportlab/__init__.py
+
+          echo "Recipe trouvé :"
+          ls -lh recipes/reportlab/__init__.py
+
+          echo
+          echo "Contenu :"
+          cat recipes/reportlab/__init__.py
+
+
+      # ============================================================
+      # 15. VERIFIER LE PROJET
+      # ============================================================
+      - name: Verify project files
+        shell: bash
+        run: |
+          set -euxo pipefail
+
+          echo "======================================"
+          echo "PROJET"
+          echo "======================================"
+
+          test -f buildozer.spec
+          test -f main.py
+
+          echo "buildozer.spec OK"
+          echo "main.py OK"
+
+          echo
+          echo "Architecture Android :"
+
+          grep -E '^android\.archs|^android\.arch' \
+            buildozer.spec || true
+
+          echo
+          echo "Requirements :"
+
+          grep '^requirements' buildozer.spec || true
+
+
+      # ============================================================
+      # 16. INITIALISATION BUILDOZER / P4A
+      # ============================================================
+      - name: Initialize Buildozer
+        shell: bash
+        run: |
+          set -euxo pipefail
+
+          buildozer --version
+
+          python -m pip show buildozer
+
+          echo "======================================"
+          echo "P4A"
+          echo "======================================"
+
+          buildozer android p4a -- --help
+
+
+      # ============================================================
+      # 17. NETTOYAGE BUILD ANDROID
+      # ============================================================
+      - name: Clean Android build
+        shell: bash
+        run: |
+          set -euxo pipefail
+
+          rm -rf .buildozer/android/platform/build-*
+          rm -rf .buildozer/android/platform/dists
+
+          echo "Anciens builds Android supprimés."
+
+
+      # ============================================================
+      # 18. BUILD APK
+      # ============================================================
+      - name: Build APK
+        shell: bash
+        timeout-minutes: 90
+        run: |
+          set -euxo pipefail
+
+          SDK="$HOME/.buildozer/android/platform/android-sdk"
+          NDK="$SDK/ndk/28.2.13676358"
+
+          export ANDROIDSDK="$SDK"
+          export ANDROID_HOME="$SDK"
+          export ANDROID_SDK_ROOT="$SDK"
+
+          export ANDROIDNDK="$NDK"
+          export ANDROID_NDK="$NDK"
+          export ANDROID_NDK_HOME="$NDK"
+          export ANDROID_NDK_ROOT="$NDK"
+
+          export ANDROIDAPI=33
+          export ANDROIDMINAPI=24
+
+          export PATH="$SDK/cmdline-tools/latest/bin:$SDK/platform-tools:$SDK/build-tools/35.0.0:$PATH"
+
+          echo "======================================"
+          echo "BUILD ANDROID"
+          echo "======================================"
+
+          echo "Java:"
+          java -version
+
+          echo
+          echo "Buildozer:"
+          buildozer --version
+
+          echo
+          echo "NDK:"
+          grep -E 'Pkg.Revision|Pkg.ReleaseName' \
+            "$NDK/source.properties"
+
+          echo
+          echo "AIDL:"
+          "$SDK/build-tools/35.0.0/aidl" --version
+
+          echo
+          echo "Lancement Buildozer..."
+
+          buildozer -v android debug
+
+
+      # ============================================================
+      # 19. VERIFIER APK
+      # ============================================================
+      - name: Check APK
+        shell: bash
+        run: |
+          set -euxo pipefail
+
+          echo "======================================"
+          echo "APK PRODUIT"
+          echo "======================================"
+
+          mkdir -p bin
+
+          find bin \
+            -maxdepth 1 \
+            -type f \
+            \( -name "*.apk" -o -name "*.aab" \) \
+            -print
+
+          APK="$(find bin \
+            -maxdepth 1 \
+            -type f \
+            -name '*.apk' \
+            -print -quit)"
+
+          if [ -z "$APK" ]; then
+            echo "ERREUR : aucun APK produit."
+            exit 1
+          fi
+
+          echo
+          echo "APK trouvé :"
+          echo "$APK"
+
+          echo
+          echo "Taille :"
+          ls -lh "$APK"
+
+          echo
+          echo "SHA-256 :"
+          sha256sum "$APK"
+
+
+      # ============================================================
+      # 20. UPLOAD APK
+      # ============================================================
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: suivi-auto-apk
+          path: bin/*.apk
+          if-no-files-found: error
+          retention-days: 30
 
