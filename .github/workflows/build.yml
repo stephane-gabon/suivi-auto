@@ -11,37 +11,44 @@ jobs:
     runs-on: ubuntu-22.04
 
     env:
+      # ------------------------------------------------------------
+      # Java
+      # ------------------------------------------------------------
       JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.20-1/x64
 
+      # ------------------------------------------------------------
+      # Android
+      # ------------------------------------------------------------
       ANDROIDAPI: "33"
       ANDROIDMINAPI: "24"
 
-      # NDK 28c = 28.2.13676358
+      # NDK 28c
       ANDROID_NDK_VERSION: "28c"
 
+      # Empêche les installations interactives
       PYTHONFORANDROID_PREREQUISITES_INSTALL_INTERACTIVE: "0"
 
     steps:
 
-      # ------------------------------------------------------------
-      # 1. Checkout
-      # ------------------------------------------------------------
+      # ============================================================
+      # 1. CHECKOUT
+      # ============================================================
       - name: Checkout
         uses: actions/checkout@v4
 
 
-      # ------------------------------------------------------------
-      # 2. Python
-      # ------------------------------------------------------------
+      # ============================================================
+      # 2. PYTHON
+      # ============================================================
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.10"
 
 
-      # ------------------------------------------------------------
-      # 3. Java 17
-      # ------------------------------------------------------------
+      # ============================================================
+      # 3. JAVA 17
+      # ============================================================
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
@@ -49,9 +56,9 @@ jobs:
           java-version: "17"
 
 
-      # ------------------------------------------------------------
-      # 4. Dépendances système
-      # ------------------------------------------------------------
+      # ============================================================
+      # 4. DEPENDANCES LINUX
+      # ============================================================
       - name: Install system dependencies
         shell: bash
         run: |
@@ -80,9 +87,9 @@ jobs:
             zlib1g-dev
 
 
-      # ------------------------------------------------------------
-      # 5. Installer Buildozer
-      # ------------------------------------------------------------
+      # ============================================================
+      # 5. BUILDOZER
+      # ============================================================
       - name: Install Buildozer
         shell: bash
         run: |
@@ -97,12 +104,13 @@ jobs:
             "buildozer==1.6.0" \
             "cython==0.29.34"
 
+          echo "===== Buildozer ====="
           buildozer --version
 
 
-      # ------------------------------------------------------------
-      # 6. Variables Android
-      # ------------------------------------------------------------
+      # ============================================================
+      # 6. VARIABLES ANDROID
+      # ============================================================
       - name: Configure Android environment
         shell: bash
         run: |
@@ -123,13 +131,14 @@ jobs:
           echo "ANDROID_NDK_ROOT=$NDK" >> "$GITHUB_ENV"
 
           echo "$SDK/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
+          echo "$SDK/tools/bin" >> "$GITHUB_PATH"
           echo "$SDK/platform-tools" >> "$GITHUB_PATH"
           echo "$SDK/build-tools/35.0.0" >> "$GITHUB_PATH"
 
 
-      # ------------------------------------------------------------
-      # 7. Cache Buildozer
-      # ------------------------------------------------------------
+      # ============================================================
+      # 7. CACHE BUILDOZER
+      # ============================================================
       - name: Cache Buildozer
         uses: actions/cache@v4
         with:
@@ -141,9 +150,9 @@ jobs:
             buildozer-${{ runner.os }}-
 
 
-      # ------------------------------------------------------------
-      # 8. Installer Android Command Line Tools
-      # ------------------------------------------------------------
+      # ============================================================
+      # 8. ANDROID COMMAND LINE TOOLS
+      # ============================================================
       - name: Install Android Command Line Tools
         shell: bash
         run: |
@@ -175,7 +184,8 @@ jobs:
             "$TEMP/cmdline-tools/." \
             "$SDK/cmdline-tools/latest/"
 
-          chmod +x "$SDK/cmdline-tools/latest/bin/"*
+          chmod +x \
+            "$SDK/cmdline-tools/latest/bin/"*
 
           echo "$SDK/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
 
@@ -183,13 +193,16 @@ jobs:
 
           test -x "$SDKMANAGER"
 
-          echo "===== sdkmanager ====="
+          echo "======================================"
+          echo "SDKMANAGER MODERNE"
+          echo "======================================"
+
           "$SDKMANAGER" --version
 
 
-      # ------------------------------------------------------------
-      # 9. Licences Android
-      # ------------------------------------------------------------
+      # ============================================================
+      # 9. LICENCES ANDROID
+      # ============================================================
       - name: Accept Android licenses
         shell: bash
         run: |
@@ -205,13 +218,13 @@ jobs:
             --sdk_root="$SDK" \
             --licenses >/dev/null || true
 
-          echo "Licences Android acceptées."
+          echo "Licences Android configurées."
 
 
-      # ------------------------------------------------------------
-      # 10. Installer SDK exactement nécessaire
-      # ------------------------------------------------------------
-      - name: Install Android SDK
+      # ============================================================
+      # 10. INSTALLER SDK
+      # ============================================================
+      - name: Install Android SDK packages
         shell: bash
         run: |
           set -euxo pipefail
@@ -225,229 +238,27 @@ jobs:
             "platforms;android-33" \
             "build-tools;35.0.0"
 
-          test -x "$SDK/build-tools/35.0.0/aidl"
-
-          echo "===== SDK ====="
-          ls -la "$SDK"
-
-          echo "===== Build Tools ====="
-          ls -la "$SDK/build-tools"
-
-          echo "===== AIDL ====="
-          "$SDK/build-tools/35.0.0/aidl" --version || true
-
-
-      # ------------------------------------------------------------
-      # 11. Installer NDK 28c
-      # ------------------------------------------------------------
-      - name: Install NDK 28c
-        shell: bash
-        run: |
-          set -euxo pipefail
-
-          SDK="$HOME/.buildozer/android/platform/android-sdk"
-          NDK="$SDK/ndk/28.2.13676358"
-
-          SDKMANAGER="$SDK/cmdline-tools/latest/bin/sdkmanager"
-
-          "$SDKMANAGER" \
-            --sdk_root="$SDK" \
-            "ndk;28.2.13676358"
-
-          test -f "$NDK/source.properties"
-
-          echo "===== NDK ====="
-          cat "$NDK/source.properties"
-
-          grep -q "Pkg.Revision = 28.2.13676358" \
-            "$NDK/source.properties"
-
-          echo "NDK 28c correctement installé."
-
-
-      # ------------------------------------------------------------
-      # 12. Vérifier environnement Android
-      # ------------------------------------------------------------
-      - name: Verify Android environment
-        shell: bash
-        run: |
-          set -euxo pipefail
-
-          SDK="$HOME/.buildozer/android/platform/android-sdk"
-          NDK="$SDK/ndk/28.2.13676358"
-
           echo "======================================"
-          echo "ANDROID"
+          echo "SDK INSTALLE"
           echo "======================================"
-
-          echo "ANDROIDSDK=$SDK"
-          echo "ANDROIDNDK=$NDK"
 
           test -d "$SDK/platforms/android-33"
           test -d "$SDK/build-tools/35.0.0"
           test -x "$SDK/build-tools/35.0.0/aidl"
 
-          test -d "$NDK"
-          test -f "$NDK/source.properties"
+          ls -la "$SDK/build-tools"
 
-          echo
-          echo "===== NDK ====="
-          cat "$NDK/source.properties"
-
-          echo
-          echo "===== AIDL ====="
+          echo "AIDL:"
           "$SDK/build-tools/35.0.0/aidl" --version || true
 
-          echo
-          echo "===== Java ====="
-          java -version
 
-
-      # ------------------------------------------------------------
-      # 13. Vérifier recipe ReportLab local
-      # ------------------------------------------------------------
-      - name: Verify local ReportLab recipe
+      # ============================================================
+      # 11. INSTALLER NDK 28c
+      # ============================================================
+      - name: Install Android NDK 28c
         shell: bash
-        run: |
-          set -euxo pipefail
-
-          echo "======================================"
-          echo "REPORTLAB RECIPE"
-          echo "======================================"
-
-          test -f recipes/reportlab/__init__.py
-
-          echo "Recipe ReportLab trouvé :"
-          ls -la recipes/reportlab/
-
-          echo
-          echo "Contenu :"
-          sed -n '1,240p' recipes/reportlab/__init__.py
-
-
-      # ------------------------------------------------------------
-      # 14. Nettoyage Buildozer
-      # ------------------------------------------------------------
-      - name: Clean Buildozer
-        shell: bash
-        run: |
-          set -euxo pipefail
-
-          rm -rf .buildozer/android/platform/build-*
-          rm -rf .buildozer/android/platform/dists
-
-          echo "Nettoyage terminé."
-
-
-      # ------------------------------------------------------------
-      # 15. Build APK
-      # ------------------------------------------------------------
-      - name: Build APK
-        shell: bash
-        timeout-minutes: 120
         run: |
           set -euxo pipefail
 
           SDK="$HOME/.buildozer/android/platform/android-sdk"
-          NDK="$SDK/ndk/28.2.13676358"
-
-          export ANDROIDSDK="$SDK"
-          export ANDROID_HOME="$SDK"
-          export ANDROID_SDK_ROOT="$SDK"
-
-          export ANDROIDNDK="$NDK"
-          export ANDROID_NDK="$NDK"
-          export ANDROID_NDK_HOME="$NDK"
-          export ANDROID_NDK_ROOT="$NDK"
-
-          export ANDROIDAPI=33
-          export ANDROIDMINAPI=24
-
-          export PATH="$SDK/cmdline-tools/latest/bin:$SDK/platform-tools:$SDK/build-tools/35.0.0:$PATH"
-
-          echo "======================================"
-          echo "ENVIRONNEMENT FINAL"
-          echo "======================================"
-
-          env | grep -E '^ANDROID' | sort
-
-          echo
-          echo "======================================"
-          echo "NDK"
-          echo "======================================"
-
-          grep "Pkg.Revision" \
-            "$ANDROIDNDK/source.properties"
-
-          echo
-          echo "======================================"
-          echo "AIDL"
-          echo "======================================"
-
-          "$SDK/build-tools/35.0.0/aidl" --version || true
-
-          echo
-          echo "======================================"
-          echo "REPORTLAB"
-          echo "======================================"
-
-          test -f recipes/reportlab/__init__.py
-
-          echo "Recipe local présent."
-
-          echo
-          echo "======================================"
-          echo "BUILDOZER"
-          echo "======================================"
-
-          buildozer --version
-
-          echo
-          echo "======================================"
-          echo "BUILD APK"
-          echo "======================================"
-
-          buildozer -v android debug
-
-
-      # ------------------------------------------------------------
-      # 16. Vérifier APK
-      # ------------------------------------------------------------
-      - name: Check APK
-        shell: bash
-        run: |
-          set -euxo pipefail
-
-          echo "======================================"
-          echo "APK PRODUIT"
-          echo "======================================"
-
-          find bin \
-            -maxdepth 1 \
-            -type f \
-            \( -name "*.apk" -o -name "*.aab" \) \
-            -print
-
-          APK="$(find bin \
-            -maxdepth 1 \
-            -type f \
-            -name '*.apk' \
-            -print -quit)"
-
-          test -n "$APK"
-
-          echo "APK trouvé : $APK"
-
-          ls -lh "$APK"
-
-
-      # ------------------------------------------------------------
-      # 17. Upload APK
-      # ------------------------------------------------------------
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: suivi-auto-apk
-          path: bin/*.apk
-          if-no-files-found: error
 
