@@ -108,34 +108,95 @@ jobs:
           echo "$SDK/build-tools/${ANDROID_BUILD_TOOLS}" >> "$GITHUB_PATH"
 
       # ---------------------------------------------------------
-      # 8. Installer/mettre à disposition les outils Android
+      # 8. Installer Android Command Line Tools depuis le dépôt
       # ---------------------------------------------------------
       - name: Install Android SDK components
         run: |
           set -euxo pipefail
 
           SDK="$ANDROID_SDK_ROOT"
-          SDKMANAGER="$SDK/cmdline-tools/latest/bin/sdkmanager"
+          CMDLINE_TOOLS_ARCHIVE="$GITHUB_WORKSPACE/android/commandlinetools-linux-11076708_latest.zip"
 
           echo "SDK = $SDK"
-          echo "sdkmanager = $SDKMANAGER"
+          echo "Archive Android = $CMDLINE_TOOLS_ARCHIVE"
 
-          if [ ! -x "$SDKMANAGER" ]; then
-            echo "sdkmanager introuvable :"
-            find "$SDK" -maxdepth 5 -type f -name sdkmanager -print || true
+          # Vérifier que l'archive existe
+          if [ ! -f "$CMDLINE_TOOLS_ARCHIVE" ]; then
+            echo "ERREUR : archive Android introuvable :"
+            echo "$CMDLINE_TOOLS_ARCHIVE"
             exit 1
           fi
 
           # -----------------------------------------------------
-          # ACCEPTATION AUTOMATIQUE DES LICENCES
+          # Préparer cmdline-tools/latest
           # -----------------------------------------------------
+
+          rm -rf "$SDK/cmdline-tools"
+          mkdir -p "$SDK/cmdline-tools/latest"
+
+          # -----------------------------------------------------
+          # Extraire l'archive
+          # -----------------------------------------------------
+
+          unzip -q \
+            "$CMDLINE_TOOLS_ARCHIVE" \
+            -d "$SDK/cmdline-tools/latest"
+
+          # L'archive Google contient normalement :
+          #
+          # cmdline-tools/
+          # ├── bin/
+          # ├── lib/
+          # └── ...
+          #
+          # On déplace son contenu vers latest/
+          if [ -d "$SDK/cmdline-tools/latest/cmdline-tools" ]; then
+            mv "$SDK/cmdline-tools/latest/cmdline-tools/"* \
+               "$SDK/cmdline-tools/latest/"
+
+            rm -rf "$SDK/cmdline-tools/latest/cmdline-tools"
+          fi
+
+          # -----------------------------------------------------
+          # Vérifier sdkmanager
+          # -----------------------------------------------------
+
+          SDKMANAGER="$SDK/cmdline-tools/latest/bin/sdkmanager"
+
+          echo
+          echo "Recherche de sdkmanager..."
+          find "$SDK/cmdline-tools" -maxdepth 4 \
+            -type f \
+            -name sdkmanager \
+            -print
+
+          if [ ! -x "$SDKMANAGER" ]; then
+            echo
+            echo "ERREUR : sdkmanager introuvable ou non exécutable."
+            echo
+            echo "Contenu de cmdline-tools :"
+            find "$SDK/cmdline-tools" -maxdepth 4 -print
+            exit 1
+          fi
+
+          chmod +x "$SDKMANAGER"
+
+          echo
+          echo "sdkmanager trouvé :"
+          "$SDKMANAGER" --version
+
+          # -----------------------------------------------------
+          # Accepter les licences
+          # -----------------------------------------------------
+
           yes | "$SDKMANAGER" \
             --sdk_root="$SDK" \
             --licenses >/dev/null || true
 
           # -----------------------------------------------------
-          # Installation des composants nécessaires
+          # Installer les composants Android
           # -----------------------------------------------------
+
           yes | "$SDKMANAGER" \
             --sdk_root="$SDK" \
             "platform-tools" \
@@ -145,15 +206,29 @@ jobs:
           # -----------------------------------------------------
           # Vérifications
           # -----------------------------------------------------
+
           test -d "$SDK/platforms/android-${ANDROID_API}"
           test -d "$SDK/build-tools/${ANDROID_BUILD_TOOLS}"
           test -x "$SDK/build-tools/${ANDROID_BUILD_TOOLS}/aidl"
 
-          echo "Android SDK correctement installé."
+          echo
+          echo "=========================================="
+          echo "Android SDK correctement installé"
+          echo "=========================================="
 
+          echo
+          echo "SDK Manager :"
+          "$SDKMANAGER" --version
+
+          echo
           echo "AIDL :"
           "$SDK/build-tools/${ANDROID_BUILD_TOOLS}/aidl" --help >/dev/null
 
+          echo
+          echo "Packages installés :"
+          "$SDKMANAGER" \
+            --sdk_root="$SDK" \
+            --list_installed || true
       # ---------------------------------------------------------
       # 9. Vérifier la recette ReportLab locale
       # ---------------------------------------------------------
