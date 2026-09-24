@@ -11,54 +11,34 @@ jobs:
     runs-on: ubuntu-22.04
 
     env:
-      # ============================================================
-      # JAVA
-      # ============================================================
+      PYTHON_VERSION: "3.10"
+
       JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.20-1/x64
 
-      # ============================================================
-      # ANDROID
-      # ============================================================
       ANDROIDAPI: "33"
       ANDROIDMINAPI: "24"
-
-      # NDK 28c
       ANDROID_NDK_VERSION: "28c"
 
-      # Empêche les installations interactives de p4a
       PYTHONFORANDROID_PREREQUISITES_INSTALL_INTERACTIVE: "0"
+
+      REPORTLAB_VERSION: "5.0.1"
 
     steps:
 
-      # ============================================================
-      # 1. CHECKOUT
-      # ============================================================
       - name: Checkout
         uses: actions/checkout@v4
 
-
-      # ============================================================
-      # 2. PYTHON 3.10
-      # ============================================================
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.10"
 
-
-      # ============================================================
-      # 3. JAVA 17
-      # ============================================================
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
 
-
-      # ============================================================
-      # 4. DEPENDANCES LINUX
-      # ============================================================
       - name: Install system dependencies
         shell: bash
         run: |
@@ -73,8 +53,13 @@ jobs:
             wget \
             curl \
             tar \
+            gzip \
+            bzip2 \
+            lbzip2 \
+            patch \
             autoconf \
             automake \
+            autopoint \
             libtool \
             libltdl-dev \
             pkg-config \
@@ -86,10 +71,6 @@ jobs:
             libssl-dev \
             zlib1g-dev
 
-
-      # ============================================================
-      # 5. BUILDOZER
-      # ============================================================
       - name: Install Buildozer
         shell: bash
         run: |
@@ -104,16 +85,9 @@ jobs:
             "buildozer==1.6.0" \
             "cython==0.29.34"
 
-          echo "======================================"
-          echo "BUILDOZER"
-          echo "======================================"
-
           buildozer --version
+          python -m pip show buildozer
 
-
-      # ============================================================
-      # 6. CONFIGURATION ENVIRONNEMENT ANDROID
-      # ============================================================
       - name: Configure Android environment
         shell: bash
         run: |
@@ -124,40 +98,37 @@ jobs:
 
           mkdir -p "$SDK"
 
-          echo "ANDROIDSDK=$SDK" >> "$GITHUB_ENV"
-          echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
-          echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
+          {
+            echo "ANDROIDSDK=$SDK"
+            echo "ANDROID_HOME=$SDK"
+            echo "ANDROID_SDK_ROOT=$SDK"
 
-          echo "ANDROIDNDK=$NDK" >> "$GITHUB_ENV"
-          echo "ANDROID_NDK=$NDK" >> "$GITHUB_ENV"
-          echo "ANDROID_NDK_HOME=$NDK" >> "$GITHUB_ENV"
-          echo "ANDROID_NDK_ROOT=$NDK" >> "$GITHUB_ENV"
+            echo "ANDROIDNDK=$NDK"
+            echo "ANDROID_NDK=$NDK"
+            echo "ANDROID_NDK_HOME=$NDK"
+            echo "ANDROID_NDK_ROOT=$NDK"
 
-          echo "ANDROIDAPI=33" >> "$GITHUB_ENV"
-          echo "ANDROIDMINAPI=24" >> "$GITHUB_ENV"
+            echo "ANDROIDAPI=33"
+            echo "ANDROIDMINAPI=24"
+            echo "ANDROID_NDK_VERSION=28c"
+          } >> "$GITHUB_ENV"
 
-          echo "$SDK/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
-          echo "$SDK/platform-tools" >> "$GITHUB_PATH"
-          echo "$SDK/build-tools/35.0.0" >> "$GITHUB_PATH"
+          {
+            echo "$SDK/cmdline-tools/latest/bin"
+            echo "$SDK/platform-tools"
+            echo "$SDK/build-tools/35.0.0"
+          } >> "$GITHUB_PATH"
 
-
-      # ============================================================
-      # 7. CACHE BUILDOZER
-      # ============================================================
       - name: Cache Buildozer
         uses: actions/cache@v4
         with:
           path: |
             ~/.buildozer
             .buildozer
-          key: buildozer-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}
+          key: buildozer-${{ runner.os }}-${{ hashFiles('buildozer.spec', 'p4a-recipes/**') }}
           restore-keys: |
             buildozer-${{ runner.os }}-
 
-
-      # ============================================================
-      # 8. ANDROID COMMAND LINE TOOLS
-      # ============================================================
       - name: Install Android Command Line Tools
         shell: bash
         run: |
@@ -169,23 +140,17 @@ jobs:
           mkdir -p "$SDK"
           mkdir -p "$TEMP"
 
-          echo "======================================"
-          echo "TELECHARGEMENT COMMAND LINE TOOLS"
-          echo "======================================"
+          URL="https://dl.google.com/android/repository/commandlinetools-linux-14742923_latest.zip"
 
           wget \
             --retry-connrefused \
             --waitretry=5 \
             --timeout=60 \
             --tries=5 \
-            "https://dl.google.com/android/repository/commandlinetools-linux-14742923_latest.zip" \
+            "$URL" \
             -O "$TEMP/cmdline-tools.zip"
 
           test -s "$TEMP/cmdline-tools.zip"
-
-          echo "======================================"
-          echo "EXTRACTION"
-          echo "======================================"
 
           unzip -q \
             "$TEMP/cmdline-tools.zip" \
@@ -208,18 +173,8 @@ jobs:
 
           test -x "$SDKMANAGER"
 
-          echo "======================================"
-          echo "SDKMANAGER"
-          echo "======================================"
-
-          ls -lh "$SDKMANAGER"
-
           "$SDKMANAGER" --version
 
-
-      # ============================================================
-      # 9. LICENCES ANDROID
-      # ============================================================
       - name: Accept Android licenses
         shell: bash
         run: |
@@ -235,12 +190,6 @@ jobs:
             --sdk_root="$SDK" \
             --licenses >/dev/null || true
 
-          echo "Licences Android configurees."
-
-
-      # ============================================================
-      # 10. INSTALLATION SDK
-      # ============================================================
       - name: Install Android SDK packages
         shell: bash
         run: |
@@ -249,79 +198,16 @@ jobs:
           SDK="$HOME/.buildozer/android/platform/android-sdk"
           SDKMANAGER="$SDK/cmdline-tools/latest/bin/sdkmanager"
 
-          echo "======================================"
-          echo "INSTALLATION SDK"
-          echo "======================================"
-
           "$SDKMANAGER" \
             --sdk_root="$SDK" \
             "platform-tools" \
             "platforms;android-33" \
             "build-tools;35.0.0"
 
-          echo "======================================"
-          echo "VERIFICATION SDK"
-          echo "======================================"
-
           test -d "$SDK/platforms/android-33"
           test -d "$SDK/build-tools/35.0.0"
           test -x "$SDK/build-tools/35.0.0/aidl"
 
-          echo "SDK OK"
-
-          echo "Build tools :"
-          ls -la "$SDK/build-tools"
-
-          echo "AIDL :"
-          "$SDK/build-tools/35.0.0/aidl" --version || true
-
-
-      # ============================================================
-      # . COMPATIBILITE BUILDOZER / SDKMANAGER
-      # ============================================================
-      - name: Configure sdkmanager compatibility
-        shell: bash
-        run: |
-          set -euxo pipefail
-
-          SDK="$HOME/.buildozer/android/platform/android-sdk"
-          MODERN_SDKMANAGER="$SDK/cmdline-tools/latest/bin/sdkmanager"
-          LEGACY_DIR="$SDK/tools/bin"
-          LEGACY_SDKMANAGER="$LEGACY_DIR/sdkmanager"
-
-          echo "======================================"
-          echo "SDKMANAGER COMPATIBILITY"
-          echo "======================================"
-
-          test -x "$MODERN_SDKMANAGER"
-
-          mkdir -p "$LEGACY_DIR"
-
-          rm -f "$LEGACY_SDKMANAGER"
-
-          ln -s \
-            "$MODERN_SDKMANAGER" \
-            "$LEGACY_SDKMANAGER"
-
-          echo "Ancien chemin attendu par p4a :"
-          echo "$LEGACY_SDKMANAGER"
-
-          echo
-          echo "Cible :"
-          readlink -f "$LEGACY_SDKMANAGER"
-
-          echo
-          echo "Verification :"
-          test -x "$LEGACY_SDKMANAGER"
-
-          "$LEGACY_SDKMANAGER" --version
-
-          echo
-          echo "sdkmanager compatible Buildozer OK."
-
-      # ============================================================
-      # 11. INSTALLATION NDK 28c
-      # ============================================================
       - name: Install Android NDK 28c
         shell: bash
         run: |
@@ -331,35 +217,21 @@ jobs:
           SDKMANAGER="$SDK/cmdline-tools/latest/bin/sdkmanager"
           NDK="$SDK/ndk/28.2.13676358"
 
-          echo "======================================"
-          echo "INSTALLATION NDK 28c"
-          echo "======================================"
-
           "$SDKMANAGER" \
             --sdk_root="$SDK" \
             "ndk;28.2.13676358"
 
-          echo "======================================"
-          echo "VERIFICATION NDK"
-          echo "======================================"
-
           test -d "$NDK"
           test -f "$NDK/source.properties"
 
-          cat "$NDK/source.properties"
-
-          grep -q "Pkg.Revision = 28.2.13676358" \
+          grep -q \
+            "Pkg.Revision = 28.2.13676358" \
             "$NDK/source.properties"
 
-          grep -q "Pkg.ReleaseName = r28c" \
+          grep -q \
+            "Pkg.ReleaseName = r28c" \
             "$NDK/source.properties"
 
-          echo "NDK 28c correctement installe."
-
-
-      # ============================================================
-      # 12. CONFIGURATION ANDROID FINALE
-      # ============================================================
       - name: Configure final Android environment
         shell: bash
         run: |
@@ -368,153 +240,103 @@ jobs:
           SDK="$HOME/.buildozer/android/platform/android-sdk"
           NDK="$SDK/ndk/28.2.13676358"
 
-          echo "ANDROIDSDK=$SDK" >> "$GITHUB_ENV"
-          echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
-          echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
+          {
+            echo "ANDROIDSDK=$SDK"
+            echo "ANDROID_HOME=$SDK"
+            echo "ANDROID_SDK_ROOT=$SDK"
 
-          echo "ANDROIDNDK=$NDK" >> "$GITHUB_ENV"
-          echo "ANDROID_NDK=$NDK" >> "$GITHUB_ENV"
-          echo "ANDROID_NDK_HOME=$NDK" >> "$GITHUB_ENV"
-          echo "ANDROID_NDK_ROOT=$NDK" >> "$GITHUB_ENV"
+            echo "ANDROIDNDK=$NDK"
+            echo "ANDROID_NDK=$NDK"
+            echo "ANDROID_NDK_HOME=$NDK"
+            echo "ANDROID_NDK_ROOT=$NDK"
 
-          echo "ANDROIDAPI=33" >> "$GITHUB_ENV"
-          echo "ANDROIDMINAPI=24" >> "$GITHUB_ENV"
+            echo "ANDROIDAPI=33"
+            echo "ANDROIDMINAPI=24"
+          } >> "$GITHUB_ENV"
 
-          echo "$SDK/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
-          echo "$SDK/platform-tools" >> "$GITHUB_PATH"
-          echo "$SDK/build-tools/35.0.0" >> "$GITHUB_PATH"
+          {
+            echo "$SDK/cmdline-tools/latest/bin"
+            echo "$SDK/platform-tools"
+            echo "$SDK/build-tools/35.0.0"
+          } >> "$GITHUB_PATH"
 
-          echo "======================================"
-          echo "ENVIRONNEMENT ANDROID FINAL"
-          echo "======================================"
-
-          echo "ANDROIDSDK=$SDK"
-          echo "ANDROIDNDK=$NDK"
-          echo "ANDROIDAPI=33"
-          echo "ANDROIDMINAPI=24"
-
-
-      # ============================================================
-      # 13. VERIFICATION ANDROID
-      # ============================================================
-      - name: Verify Android environment
+      - name: Prepare official ReportLab source
         shell: bash
         run: |
           set -euxo pipefail
 
-          SDK="$HOME/.buildozer/android/platform/android-sdk"
-          NDK="$SDK/ndk/28.2.13676358"
-          SDKMANAGER="$SDK/cmdline-tools/latest/bin/sdkmanager"
-          AIDL="$SDK/build-tools/35.0.0/aidl"
+          VERSION="${REPORTLAB_VERSION}"
 
-          echo "======================================"
-          echo "JAVA"
-          echo "======================================"
+          BASE_URL="https://www.reportlab.com/pypi/simple/reportlab"
+          ARCHIVE="reportlab-${VERSION}.tar.gz"
 
-          java -version
+          WORK="$RUNNER_TEMP/reportlab"
+          SOURCE="$WORK/reportlab-${VERSION}"
 
-          echo "======================================"
-          echo "SDK"
-          echo "======================================"
+          rm -rf "$WORK"
+          mkdir -p "$WORK"
 
-          test -d "$SDK"
-          test -d "$SDK/platforms/android-33"
-          test -d "$SDK/build-tools/35.0.0"
-          test -x "$AIDL"
+          echo "ReportLab version: $VERSION"
+          echo "Source officielle:"
+          echo "$BASE_URL/$ARCHIVE"
 
-          echo "SDK OK"
+          wget \
+            --retry-connrefused \
+            --waitretry=5 \
+            --timeout=60 \
+            --tries=5 \
+            "$BASE_URL/$ARCHIVE" \
+            -O "$WORK/$ARCHIVE"
 
-          echo "======================================"
-          echo "SDKMANAGER"
-          echo "======================================"
+          test -s "$WORK/$ARCHIVE"
 
-          test -f "$SDKMANAGER"
-          test -x "$SDKMANAGER"
+          tar -xzf "$WORK/$ARCHIVE" -C "$WORK"
 
-          ls -l "$SDKMANAGER"
+          test -d "$SOURCE"
+          test -f "$SOURCE/setup.py"
 
-          "$SDKMANAGER" --version
+          echo "P4A_reportlab_DIR=$SOURCE" >> "$GITHUB_ENV"
+          echo "REPORTLAB_SOURCE=$SOURCE" >> "$GITHUB_ENV"
 
-          echo "======================================"
-          echo "NDK"
-          echo "======================================"
+          ls -la "$SOURCE"
 
-          test -d "$NDK"
-          test -f "$NDK/source.properties"
-
-          cat "$NDK/source.properties"
-
-          grep -q "Pkg.Revision = 28.2.13676358" \
-            "$NDK/source.properties"
-
-          grep -q "Pkg.ReleaseName = r28c" \
-            "$NDK/source.properties"
-
-          echo "NDK 28c OK"
-
-          echo "======================================"
-          echo "AIDL"
-          echo "======================================"
-
-          ls -l "$AIDL"
-
-          "$AIDL" --version || true
-
-          echo "======================================"
-          echo "ENVIRONMENT"
-          echo "======================================"
-
-          echo "ANDROIDSDK=$ANDROIDSDK"
-          echo "ANDROIDNDK=$ANDROIDNDK"
-          echo "ANDROIDAPI=$ANDROIDAPI"
-          echo "ANDROIDMINAPI=$ANDROIDMINAPI"
-
-          echo "======================================"
-          echo "COMMANDS"
-          echo "======================================"
-
-          command -v java
-          command -v sdkmanager
-          command -v aidl
-
-          echo "======================================"
-          echo "ANDROID VERIFICATION OK"
-          echo "======================================"
-
-
-      # ============================================================
-      # 14. VERIFICATION RECIPE REPORTLAB
-      # ============================================================
-      - name: Verify ReportLab recipe
+      - name: Verify local ReportLab recipe
         shell: bash
         run: |
           set -euxo pipefail
 
-          echo "======================================"
-          echo "REPORTLAB RECIPE"
-          echo "======================================"
+          test -f p4a-recipes/reportlab/__init__.py
 
-          test -f recipes/reportlab/__init__.py
-
-          echo "Recipe trouve :"
-          ls -lh recipes/reportlab/__init__.py
+          echo "===== RECETTE REPORTLAB ====="
+          cat p4a-recipes/reportlab/__init__.py
 
           echo
-          echo "Contenu :"
-          cat recipes/reportlab/__init__.py
+          echo "===== SOURCE REPORTLAB ====="
 
+          test -n "${P4A_reportlab_DIR:-}"
+          test -d "$P4A_reportlab_DIR"
+          test -f "$P4A_reportlab_DIR/setup.py"
 
-      # ============================================================
-      # 15. VERIFICATION PROJET
-      # ============================================================
+          echo "$P4A_reportlab_DIR"
+
+          echo
+          echo "===== VERIFICATION SOURCE ====="
+
+          if grep -R \
+            "hg.reportlab.com" \
+            p4a-recipes \
+            2>/dev/null; then
+
+            echo "ERREUR: ancienne URL ReportLab détectée."
+            exit 1
+          fi
+
+          echo "Aucune référence à hg.reportlab.com."
+
       - name: Verify project files
         shell: bash
         run: |
           set -euxo pipefail
-
-          echo "======================================"
-          echo "PROJET"
-          echo "======================================"
 
           test -f buildozer.spec
           test -f main.py
@@ -523,69 +345,111 @@ jobs:
           echo "main.py OK"
 
           echo
-          echo "Architecture Android :"
-
-          grep -E '^android\.archs|^android\.arch' \
+          grep -E \
+            '^android\.archs|^android\.arch' \
             buildozer.spec || true
 
           echo
-          echo "Requirements :"
+          grep '^requirements' \
+            buildozer.spec || true
 
-          grep '^requirements' buildozer.spec || true
-
-          echo
-          echo "Recipe ReportLab :"
-
-          test -d recipes/reportlab
-          test -f recipes/reportlab/__init__.py
-
-          echo "recipes/reportlab OK"
-
-
-      # ============================================================
-      # 16. VERIFICATION BUILDOZER SANS LANCER P4A
-      # ============================================================
-      - name: Verify Buildozer
+      - name: Verify Android environment
         shell: bash
         run: |
           set -euxo pipefail
 
-          echo "======================================"
-          echo "BUILDOZER"
-          echo "======================================"
+          SDK="$HOME/.buildozer/android/platform/android-sdk"
+          NDK="$SDK/ndk/28.2.13676358"
 
-          buildozer --version
+          SDKMANAGER="$SDK/cmdline-tools/latest/bin/sdkmanager"
+          AIDL="$SDK/build-tools/35.0.0/aidl"
 
-          python -m pip show buildozer
+          echo "===== JAVA ====="
+          java -version
 
           echo
-          echo "Buildozer OK."
+          echo "===== BUILDOZER ====="
+          buildozer --version
 
+          echo
+          echo "===== SDK ====="
 
-      # ============================================================
-      # 17. NETTOYAGE DES ANCIENS BUILDS
-      # ============================================================
+          test -d "$SDK/platforms/android-33"
+          test -d "$SDK/build-tools/35.0.0"
+          test -x "$AIDL"
+
+          echo "SDK OK"
+
+          echo
+          echo "===== SDKMANAGER ====="
+
+          test -x "$SDKMANAGER"
+          "$SDKMANAGER" --version
+
+          echo
+          echo "===== NDK ====="
+
+          test -d "$NDK"
+          test -f "$NDK/source.properties"
+
+          grep -q \
+            "Pkg.Revision = 28.2.13676358" \
+            "$NDK/source.properties"
+
+          grep -q \
+            "Pkg.ReleaseName = r28c" \
+            "$NDK/source.properties"
+
+          echo "NDK 28c OK"
+
+          echo
+          echo "===== AIDL ====="
+
+          "$AIDL" --help >/dev/null
+
+          echo "AIDL OK"
+
+      - name: Initialize Buildozer
+        shell: bash
+        run: |
+          set -euxo pipefail
+
+          buildozer --version
+          python -m pip show buildozer
+
+          buildozer android p4a -- --help
+
+      - name: Verify P4A ReportLab override
+        shell: bash
+        run: |
+          set -euxo pipefail
+
+          P4A="$HOME/.buildozer/android/platform/python-for-android"
+
+          test -d "$P4A"
+          test -d "$P4A_reportlab_DIR"
+
+          echo "P4A:"
+          echo "$P4A"
+
+          echo
+          echo "ReportLab:"
+          echo "$P4A_reportlab_DIR"
+
+          ls -la "$P4A_reportlab_DIR"
+
       - name: Clean Android build
         shell: bash
         run: |
           set -euxo pipefail
 
-          echo "======================================"
-          echo "NETTOYAGE"
-          echo "======================================"
+          rm -rf \
+            .buildozer/android/platform/build-* \
+            .buildozer/android/platform/dists
 
-          rm -rf .buildozer/android/platform/build-*
-          rm -rf .buildozer/android/platform/dists
-
-          echo "Anciens builds Android supprimes."
-
-
-      # ============================================================
-      # 18. BUILD APK
-      # ============================================================
       - name: Build APK
         shell: bash
-        timeout-minutes: 90
+        timeout-minutes: 120
         run: |
           set -euxo pipefail
 
@@ -604,113 +468,88 @@ jobs:
           export ANDROIDAPI=33
           export ANDROIDMINAPI=24
 
-          export PATH="$SDK/cmdline-tools/latest/bin:$SDK/platform-tools:$SDK/build-tools/35.0.0:$SDK/tools/bin:$PATH"
+          export P4A_reportlab_DIR="$REPORTLAB_SOURCE"
+
+          export PATH="$SDK/cmdline-tools/latest/bin:$SDK/platform-tools:$SDK/build-tools/35.0.0:$PATH"
 
           echo "======================================"
           echo "BUILD ANDROID"
           echo "======================================"
 
-          echo "Java:"
           java -version
 
           echo
-          echo "Buildozer:"
           buildozer --version
 
           echo
           echo "SDK:"
-          test -d "$SDK/platforms/android-33"
-          test -d "$SDK/build-tools/35.0.0"
-
-          echo "SDK OK"
-
-          echo
-          echo "sdkmanager:"
-          "$SDK/tools/bin/sdkmanager" --version
+          echo "$ANDROIDSDK"
 
           echo
           echo "NDK:"
-          grep -E 'Pkg.Revision|Pkg.ReleaseName' \
+          echo "$ANDROIDNDK"
+
+          grep -E \
+            'Pkg.Revision|Pkg.ReleaseName' \
             "$NDK/source.properties"
 
           echo
-          echo "ReportLab recipe:"
-          test -f recipes/reportlab/__init__.py
+          echo "ReportLab:"
+          echo "$P4A_reportlab_DIR"
 
-          echo
-          echo "Architecture:"
-          grep -E '^android\.archs' buildozer.spec
+          test -d "$P4A_reportlab_DIR"
+          test -f "$P4A_reportlab_DIR/setup.py"
 
-          echo
-          echo "Requirements:"
-          grep '^requirements' buildozer.spec
+          if grep -R \
+            "hg.reportlab.com" \
+            "$P4A_reportlab_DIR" \
+            2>/dev/null; then
+
+            echo "ERREUR: ancienne source ReportLab détectée."
+            exit 1
+          fi
 
           echo
           echo "Lancement Buildozer..."
 
           buildozer -v android debug
 
-      # ============================================================
-      # 19. VERIFICATION APK
-      # ============================================================
       - name: Check APK
         shell: bash
         run: |
           set -euxo pipefail
 
-          echo "======================================"
-          echo "APK PRODUIT"
-          echo "======================================"
-
           mkdir -p bin
-
-          echo "Contenu de bin :"
-          ls -lah bin || true
-
-          echo
-          echo "Recherche APK :"
 
           find bin \
             -maxdepth 1 \
             -type f \
-            -name "*.apk" \
+            \( -name "*.apk" -o -name "*.aab" \) \
             -print
 
-          APK="$(find bin \
-            -maxdepth 1 \
-            -type f \
-            -name '*.apk' \
-            -print -quit)"
+          APK="$(
+            find bin \
+              -maxdepth 1 \
+              -type f \
+              -name '*.apk' \
+              -print \
+              -quit
+          )"
 
           if [ -z "$APK" ]; then
-            echo "ERREUR : aucun APK produit."
-            echo
-            echo "Recherche dans tout le projet :"
-
-            find . \
-              -type f \
-              -name "*.apk" \
-              -print
-
+            echo "ERREUR: aucun APK produit."
             exit 1
           fi
 
-          echo
-          echo "APK trouve :"
+          echo "APK:"
           echo "$APK"
 
-          echo
-          echo "Taille :"
           ls -lh "$APK"
 
           echo
-          echo "SHA-256 :"
+          echo "SHA-256:"
           sha256sum "$APK"
 
-
-      # ============================================================
-      # 20. UPLOAD APK
-      # ============================================================
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
