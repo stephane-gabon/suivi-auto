@@ -32,11 +32,6 @@ android.minapi = 24
 android.ndk = 28c
 android.ndk_api = 24
 
-# Chemins contrôlés par le workflow GitHub Actions
-
-android.sdk_path = /home/runner/.buildozer/android/platform/android-sdk
-android.ndk_path = /home/runner/.buildozer/android/platform/android-sdk/ndk/28.2.13676358
-
 # Ne pas laisser Buildozer essayer de mettre à jour
 
 # automatiquement le SDK du runner.
@@ -53,7 +48,7 @@ android.enable_androidx = True
 
 # Architectures
 
-android.arch = arm64-v8a,armeabi-v7a
+android.archs = arm64-v8a,armeabi-v7a
 
 [buildozer]
 
