@@ -17,7 +17,7 @@ jobs:
 
       ANDROID_API: "33"
       ANDROID_MIN_API: "24"
-      ANDROID_BUILD_TOOLS: "34.0.0"
+      ANDROID_BUILD_TOOLS: "35.0.0"
       ANDROID_NDK: "28c"
 
       P4A_LOCAL_RECIPES: p4a-recipes
