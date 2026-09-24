@@ -11,11 +11,12 @@ jobs:
     runs-on: ubuntu-22.04
 
     env:
-      JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
+      JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.20-1/x64
 
       ANDROIDAPI: "33"
       ANDROIDMINAPI: "24"
 
+      # NDK 28c = 28.2.13676358
       ANDROID_NDK_VERSION: "28c"
 
       PYTHONFORANDROID_PREREQUISITES_INSTALL_INTERACTIVE: "0"
@@ -49,7 +50,7 @@ jobs:
 
 
       # ------------------------------------------------------------
-      # 4. Dépendances Linux
+      # 4. Dépendances système
       # ------------------------------------------------------------
       - name: Install system dependencies
         shell: bash
@@ -100,199 +101,7 @@ jobs:
 
 
       # ------------------------------------------------------------
-      # 6. Préparer les répertoires Android
-      # ------------------------------------------------------------
-      - name: Prepare Android directories
-        shell: bash
-        run: |
-          set -euxo pipefail
-
-          SDK="$HOME/.buildozer/android/platform/android-sdk"
-
-          mkdir -p "$SDK"
-          mkdir -p "$SDK/cmdline-tools"
-          mkdir -p "$SDK/platform-tools"
-
-          echo "ANDROIDSDK=$SDK" >> "$GITHUB_ENV"
-          echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
-          echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
-
-          echo "$SDK/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
-          echo "$SDK/platform-tools" >> "$GITHUB_PATH"
-
-
-      # ------------------------------------------------------------
-      # 7. Installer Android Command Line Tools
-      # ------------------------------------------------------------
-      - name: Install Android Command Line Tools
-        shell: bash
-        run: |
-          set -euxo pipefail
-
-          SDK="$HOME/.buildozer/android/platform/android-sdk"
-          TEMP="$RUNNER_TEMP/android-cmdline-tools"
-
-          mkdir -p "$TEMP"
-
-          rm -rf "$SDK/cmdline-tools/latest"
-
-          wget -q \
-            "https://dl.google.com/android/repository/commandlinetools-linux-14742923_latest.zip" \
-            -O "$TEMP/cmdline-tools.zip"
-
-          unzip -q \
-            "$TEMP/cmdline-tools.zip" \
-            -d "$TEMP"
-
-          mkdir -p "$SDK/cmdline-tools/latest"
-
-          cp -R \
-            "$TEMP/cmdline-tools/." \
-            "$SDK/cmdline-tools/latest/"
-
-          chmod +x \
-            "$SDK/cmdline-tools/latest/bin/sdkmanager"
-
-          echo "===== sdkmanager ====="
-
-          "$SDK/cmdline-tools/latest/bin/sdkmanager" \
-            --version
-
-
-      # ------------------------------------------------------------
-      # 8. Créer le chemin legacy attendu par Buildozer 1.6.0
-      # ------------------------------------------------------------
-      - name: Create Buildozer sdkmanager compatibility path
-        shell: bash
-        run: |
-          set -euxo pipefail
-
-          SDK="$HOME/.buildozer/android/platform/android-sdk"
-
-          mkdir -p "$SDK/tools/bin"
-
-          ln -sf \
-            "$SDK/cmdline-tools/latest/bin/sdkmanager" \
-            "$SDK/tools/bin/sdkmanager"
-
-          ln -sf \
-            "$SDK/cmdline-tools/latest/bin/avdmanager" \
-            "$SDK/tools/bin/avdmanager"
-
-          echo "===== Compatibility ====="
-
-          ls -la "$SDK/tools/bin"
-
-          test -x "$SDK/tools/bin/sdkmanager"
-
-          "$SDK/tools/bin/sdkmanager" --version
-
-
-      # ------------------------------------------------------------
-      # 9. Accepter les licences Android
-      # ------------------------------------------------------------
-      - name: Accept Android licenses
-        shell: bash
-        run: |
-          set -euxo pipefail
-
-          SDK="$HOME/.buildozer/android/platform/android-sdk"
-          SDKMANAGER="$SDK/cmdline-tools/latest/bin/sdkmanager"
-
-          mkdir -p "$HOME/.android"
-          touch "$HOME/.android/repositories.cfg"
-
-          for i in $(seq 1 30); do
-            printf 'y\n'
-          done | "$SDKMANAGER" \
-            --sdk_root="$SDK" \
-            --licenses || true
-
-          echo "Licences Android traitées."
-
-
-      # ------------------------------------------------------------
-      # 10. Installer SDK 33 + Build Tools
-      # ------------------------------------------------------------
-      - name: Install Android SDK packages
-        shell: bash
-        run: |
-          set -euxo pipefail
-
-          SDK="$HOME/.buildozer/android/platform/android-sdk"
-          SDKMANAGER="$SDK/cmdline-tools/latest/bin/sdkmanager"
-
-          "$SDKMANAGER" \
-            --sdk_root="$SDK" \
-            "platform-tools" \
-            "platforms;android-33" \
-            "build-tools;35.0.0"
-
-          echo "===== SDK ====="
-
-          test -d "$SDK/platforms/android-33"
-          test -d "$SDK/build-tools/35.0.0"
-          test -x "$SDK/build-tools/35.0.0/aidl"
-
-          echo "SDK 33 OK"
-          echo "Build Tools 35 OK"
-
-
-      # ------------------------------------------------------------
-      # 11. Installer réellement NDK r28c
-      # ------------------------------------------------------------
-
-      - name: Install Android NDK r28c
-        shell: bash
-        run: |
-          set -euxo pipefail
-
-          SDK="$HOME/.buildozer/android/platform/android-sdk"
-          NDK="$SDK/ndk/28.2.13676358"
-
-          SDKMANAGER="$SDK/cmdline-tools/latest/bin/sdkmanager"
-
-          echo "======================================"
-          echo "INSTALLATION NDK r28c"
-          echo "======================================"
-
-          "$SDKMANAGER" \
-            --sdk_root="$SDK" \
-            "ndk;28.2.13676358"
-
-          echo "======================================"
-          echo "VERIFICATION NDK"
-          echo "======================================"
-
-          test -f "$NDK/source.properties"
-
-          cat "$NDK/source.properties"
-
-          # Le fichier source.properties contient :
-          # Pkg.Revision = 28.2.13676358
-          # et non :
-          # Pkg.Revision=28.2.13676358
-
-          grep -q \
-            "Pkg.Revision = 28.2.13676358" \
-            "$NDK/source.properties"
-
-          grep -q \
-            "Pkg.ReleaseName = r28c" \
-            "$NDK/source.properties"
-
-          echo
-          echo "======================================"
-          echo " NDK r28c CORRECTEMENT INSTALLE"
-          echo "======================================"
-
-          echo "NDK : $NDK"
-          echo "Version : 28.2.13676358"
-          echo "Release : r28c"
-
-
-      # ------------------------------------------------------------
-      # 12. Variables NDK finales
+      # 6. Variables Android
       # ------------------------------------------------------------
       - name: Configure Android environment
         shell: bash
@@ -301,6 +110,8 @@ jobs:
 
           SDK="$HOME/.buildozer/android/platform/android-sdk"
           NDK="$SDK/ndk/28.2.13676358"
+
+          mkdir -p "$SDK"
 
           echo "ANDROIDSDK=$SDK" >> "$GITHUB_ENV"
           echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
@@ -312,78 +123,12 @@ jobs:
           echo "ANDROID_NDK_ROOT=$NDK" >> "$GITHUB_ENV"
 
           echo "$SDK/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
-          echo "$SDK/tools/bin" >> "$GITHUB_PATH"
           echo "$SDK/platform-tools" >> "$GITHUB_PATH"
           echo "$SDK/build-tools/35.0.0" >> "$GITHUB_PATH"
 
 
       # ------------------------------------------------------------
-      # 13. Vérification complète
-      # ------------------------------------------------------------
-      - name: Verify Android environment
-        shell: bash
-        run: |
-          set -euxo pipefail
-
-          SDK="$HOME/.buildozer/android/platform/android-sdk"
-          NDK="$SDK/ndk/28.2.13676358"
-
-          echo "======================================"
-          echo "JAVA"
-          echo "======================================"
-
-          java -version
-
-          echo "======================================"
-          echo "SDK"
-          echo "======================================"
-
-          test -d "$SDK"
-          test -d "$SDK/platforms/android-33"
-          test -d "$SDK/build-tools/35.0.0"
-
-          echo "SDK OK"
-
-          echo "======================================"
-          echo "SDKMANAGER"
-          echo "======================================"
-
-          test -x "$SDK/tools/bin/sdkmanager"
-          "$SDK/tools/bin/sdkmanager" --version
-
-          echo "sdkmanager OK"
-
-          echo "======================================"
-          echo "AIDL"
-          echo "======================================"
-
-          test -x "$SDK/build-tools/35.0.0/aidl"
-
-          "$SDK/build-tools/35.0.0/aidl" --version || true
-
-          echo "AIDL OK"
-
-          echo "======================================"
-          echo "NDK"
-          echo "======================================"
-
-          test -d "$NDK"
-          test -f "$NDK/source.properties"
-
-          grep "Pkg.Revision" \
-            "$NDK/source.properties"
-
-          echo "NDK r28c OK"
-
-          echo "======================================"
-          echo "ENVIRONMENT"
-          echo "======================================"
-
-          env | grep -E '^ANDROID' | sort || true
-
-
-      # ------------------------------------------------------------
-      # 14. Cache Buildozer
+      # 7. Cache Buildozer
       # ------------------------------------------------------------
       - name: Cache Buildozer
         uses: actions/cache@v4
@@ -397,9 +142,193 @@ jobs:
 
 
       # ------------------------------------------------------------
-      # 15. Nettoyer uniquement les anciens builds
+      # 8. Installer Android Command Line Tools
       # ------------------------------------------------------------
-      - name: Clean previous build
+      - name: Install Android Command Line Tools
+        shell: bash
+        run: |
+          set -euxo pipefail
+
+          SDK="$HOME/.buildozer/android/platform/android-sdk"
+          TEMP="$RUNNER_TEMP/android-cmdline-tools"
+
+          mkdir -p "$SDK"
+          mkdir -p "$TEMP"
+
+          wget \
+            --retry-connrefused \
+            --waitretry=5 \
+            --timeout=60 \
+            --tries=5 \
+            "https://dl.google.com/android/repository/commandlinetools-linux-14742923_latest.zip" \
+            -O "$TEMP/cmdline-tools.zip"
+
+          unzip -q \
+            "$TEMP/cmdline-tools.zip" \
+            -d "$TEMP"
+
+          rm -rf "$SDK/cmdline-tools"
+
+          mkdir -p "$SDK/cmdline-tools/latest"
+
+          cp -R \
+            "$TEMP/cmdline-tools/." \
+            "$SDK/cmdline-tools/latest/"
+
+          chmod +x "$SDK/cmdline-tools/latest/bin/"*
+
+          echo "$SDK/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
+
+          SDKMANAGER="$SDK/cmdline-tools/latest/bin/sdkmanager"
+
+          test -x "$SDKMANAGER"
+
+          echo "===== sdkmanager ====="
+          "$SDKMANAGER" --version
+
+
+      # ------------------------------------------------------------
+      # 9. Licences Android
+      # ------------------------------------------------------------
+      - name: Accept Android licenses
+        shell: bash
+        run: |
+          set -euxo pipefail
+
+          SDK="$HOME/.buildozer/android/platform/android-sdk"
+          SDKMANAGER="$SDK/cmdline-tools/latest/bin/sdkmanager"
+
+          mkdir -p "$HOME/.android"
+          touch "$HOME/.android/repositories.cfg"
+
+          yes | "$SDKMANAGER" \
+            --sdk_root="$SDK" \
+            --licenses >/dev/null || true
+
+          echo "Licences Android acceptées."
+
+
+      # ------------------------------------------------------------
+      # 10. Installer SDK exactement nécessaire
+      # ------------------------------------------------------------
+      - name: Install Android SDK
+        shell: bash
+        run: |
+          set -euxo pipefail
+
+          SDK="$HOME/.buildozer/android/platform/android-sdk"
+          SDKMANAGER="$SDK/cmdline-tools/latest/bin/sdkmanager"
+
+          "$SDKMANAGER" \
+            --sdk_root="$SDK" \
+            "platform-tools" \
+            "platforms;android-33" \
+            "build-tools;35.0.0"
+
+          test -x "$SDK/build-tools/35.0.0/aidl"
+
+          echo "===== SDK ====="
+          ls -la "$SDK"
+
+          echo "===== Build Tools ====="
+          ls -la "$SDK/build-tools"
+
+          echo "===== AIDL ====="
+          "$SDK/build-tools/35.0.0/aidl" --version || true
+
+
+      # ------------------------------------------------------------
+      # 11. Installer NDK 28c
+      # ------------------------------------------------------------
+      - name: Install NDK 28c
+        shell: bash
+        run: |
+          set -euxo pipefail
+
+          SDK="$HOME/.buildozer/android/platform/android-sdk"
+          NDK="$SDK/ndk/28.2.13676358"
+
+          SDKMANAGER="$SDK/cmdline-tools/latest/bin/sdkmanager"
+
+          "$SDKMANAGER" \
+            --sdk_root="$SDK" \
+            "ndk;28.2.13676358"
+
+          test -f "$NDK/source.properties"
+
+          echo "===== NDK ====="
+          cat "$NDK/source.properties"
+
+          grep -q "Pkg.Revision = 28.2.13676358" \
+            "$NDK/source.properties"
+
+          echo "NDK 28c correctement installé."
+
+
+      # ------------------------------------------------------------
+      # 12. Vérifier environnement Android
+      # ------------------------------------------------------------
+      - name: Verify Android environment
+        shell: bash
+        run: |
+          set -euxo pipefail
+
+          SDK="$HOME/.buildozer/android/platform/android-sdk"
+          NDK="$SDK/ndk/28.2.13676358"
+
+          echo "======================================"
+          echo "ANDROID"
+          echo "======================================"
+
+          echo "ANDROIDSDK=$SDK"
+          echo "ANDROIDNDK=$NDK"
+
+          test -d "$SDK/platforms/android-33"
+          test -d "$SDK/build-tools/35.0.0"
+          test -x "$SDK/build-tools/35.0.0/aidl"
+
+          test -d "$NDK"
+          test -f "$NDK/source.properties"
+
+          echo
+          echo "===== NDK ====="
+          cat "$NDK/source.properties"
+
+          echo
+          echo "===== AIDL ====="
+          "$SDK/build-tools/35.0.0/aidl" --version || true
+
+          echo
+          echo "===== Java ====="
+          java -version
+
+
+      # ------------------------------------------------------------
+      # 13. Vérifier recipe ReportLab local
+      # ------------------------------------------------------------
+      - name: Verify local ReportLab recipe
+        shell: bash
+        run: |
+          set -euxo pipefail
+
+          echo "======================================"
+          echo "REPORTLAB RECIPE"
+          echo "======================================"
+
+          test -f recipes/reportlab/__init__.py
+
+          echo "Recipe ReportLab trouvé :"
+          ls -la recipes/reportlab/
+
+          echo
+          echo "Contenu :"
+          sed -n '1,240p' recipes/reportlab/__init__.py
+
+
+      # ------------------------------------------------------------
+      # 14. Nettoyage Buildozer
+      # ------------------------------------------------------------
+      - name: Clean Buildozer
         shell: bash
         run: |
           set -euxo pipefail
@@ -407,15 +336,15 @@ jobs:
           rm -rf .buildozer/android/platform/build-*
           rm -rf .buildozer/android/platform/dists
 
-          echo "Ancien build supprimé."
+          echo "Nettoyage terminé."
 
 
       # ------------------------------------------------------------
-      # 16. Build APK
+      # 15. Build APK
       # ------------------------------------------------------------
       - name: Build APK
         shell: bash
-        timeout-minutes: 90
+        timeout-minutes: 120
         run: |
           set -euxo pipefail
 
@@ -434,32 +363,43 @@ jobs:
           export ANDROIDAPI=33
           export ANDROIDMINAPI=24
 
-          export PATH="$SDK/tools/bin:$SDK/cmdline-tools/latest/bin:$SDK/platform-tools:$SDK/build-tools/35.0.0:$PATH"
+          export PATH="$SDK/cmdline-tools/latest/bin:$SDK/platform-tools:$SDK/build-tools/35.0.0:$PATH"
 
           echo "======================================"
           echo "ENVIRONNEMENT FINAL"
           echo "======================================"
 
-          echo "ANDROIDSDK=$ANDROIDSDK"
-          echo "ANDROIDNDK=$ANDROIDNDK"
-          echo "ANDROIDAPI=$ANDROIDAPI"
-          echo "ANDROIDMINAPI=$ANDROIDMINAPI"
+          env | grep -E '^ANDROID' | sort
 
           echo
-          echo "sdkmanager:"
-          which sdkmanager
-          sdkmanager --version
+          echo "======================================"
+          echo "NDK"
+          echo "======================================"
+
+          grep "Pkg.Revision" \
+            "$ANDROIDNDK/source.properties"
 
           echo
-          echo "AIDL:"
+          echo "======================================"
+          echo "AIDL"
+          echo "======================================"
+
           "$SDK/build-tools/35.0.0/aidl" --version || true
 
           echo
-          echo "NDK:"
-          grep "Pkg.Revision" "$NDK/source.properties"
+          echo "======================================"
+          echo "REPORTLAB"
+          echo "======================================"
+
+          test -f recipes/reportlab/__init__.py
+
+          echo "Recipe local présent."
 
           echo
-          echo "Buildozer:"
+          echo "======================================"
+          echo "BUILDOZER"
+          echo "======================================"
+
           buildozer --version
 
           echo
@@ -471,7 +411,7 @@ jobs:
 
 
       # ------------------------------------------------------------
-      # 17. Vérifier APK
+      # 16. Vérifier APK
       # ------------------------------------------------------------
       - name: Check APK
         shell: bash
@@ -502,7 +442,7 @@ jobs:
 
 
       # ------------------------------------------------------------
-      # 18. Upload APK
+      # 17. Upload APK
       # ------------------------------------------------------------
       - name: Upload APK
         uses: actions/upload-artifact@v4
