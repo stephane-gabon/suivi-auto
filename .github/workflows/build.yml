@@ -1,3 +1,4 @@
+```yaml
 name: Build Android APK
 
 on:
@@ -31,6 +32,24 @@ jobs:
           python3 -m pip install --upgrade pip
           python3 -m pip install --upgrade buildozer cython
 
+      - name: Configure Java 17
+        run: |
+          JAVA_HOME="/usr/lib/jvm/java-17-openjdk-amd64"
+
+          echo "JAVA_HOME=$JAVA_HOME" >> "$GITHUB_ENV"
+          echo "$JAVA_HOME/bin" >> "$GITHUB_PATH"
+
+          export JAVA_HOME="$JAVA_HOME"
+          export PATH="$JAVA_HOME/bin:$PATH"
+
+          echo "===== JAVA ====="
+          which java
+          java -version
+
+          echo "===== JAVAC ====="
+          which javac
+          javac -version
+
       - name: Cache Buildozer
         uses: actions/cache@v4
         with:
@@ -42,8 +61,16 @@ jobs:
             buildozer-${{ runner.os }}-
 
       - name: Install Android SDK
+        env:
+          JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
         run: |
           SDK="$HOME/.buildozer/android/platform/android-sdk"
+
+          export JAVA_HOME="/usr/lib/jvm/java-17-openjdk-amd64"
+          export PATH="$JAVA_HOME/bin:$PATH"
+
+          echo "===== JAVA AVANT SDKMANAGER ====="
+          java -version
 
           mkdir -p "$SDK/cmdline-tools"
 
@@ -51,37 +78,54 @@ jobs:
             https://dl.google.com/android/repository/commandlinetools-linux-10406996_latest.zip \
             -O /tmp/cmdline-tools.zip
 
+          rm -rf "$SDK/cmdline-tools/latest"
+
           unzip -q /tmp/cmdline-tools.zip -d "$SDK/cmdline-tools"
 
-          if [ -d "$SDK/cmdline-tools/cmdline-tools" ]; then
-            mkdir -p "$SDK/cmdline-tools/latest"
-            cp -r "$SDK/cmdline-tools/cmdline-tools/"* \
-              "$SDK/cmdline-tools/latest/"
-          fi
+          mkdir -p "$SDK/cmdline-tools/latest"
+
+          cp -r \
+            "$SDK/cmdline-tools/cmdline-tools/"* \
+            "$SDK/cmdline-tools/latest/"
+
+          rm -rf "$SDK/cmdline-tools/cmdline-tools"
 
           export ANDROIDSDK="$SDK"
           export ANDROID_HOME="$SDK"
-          export PATH="$SDK/cmdline-tools/latest/bin:$SDK/platform-tools:$PATH"
+          export PATH="$JAVA_HOME/bin:$SDK/cmdline-tools/latest/bin:$SDK/platform-tools:$PATH"
 
           echo "ANDROIDSDK=$SDK" >> "$GITHUB_ENV"
           echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
           echo "$SDK/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
           echo "$SDK/platform-tools" >> "$GITHUB_PATH"
 
+          echo "===== SDKMANAGER ====="
+          which sdkmanager
+          sdkmanager --version
+
+          echo "===== ACCEPT LICENSES ====="
           yes | sdkmanager --licenses >/dev/null || true
 
+          echo "===== INSTALL SDK ====="
           sdkmanager \
             "platform-tools" \
             "platforms;android-33" \
             "build-tools;33.0.2"
 
       - name: Install Android NDK
+        env:
+          JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
         run: |
           SDK="$HOME/.buildozer/android/platform/android-sdk"
 
-          export ANDROIDSDK="$SDK"
-          export ANDROID_HOME="$SDK"
-          export PATH="$SDK/cmdline-tools/latest/bin:$SDK/platform-tools:$PATH"
+          export JAVA_HOME="/usr/lib/jvm/java-17-openjdk-amd64"
+          export PATH="$JAVA_HOME/bin:$SDK/cmdline-tools/latest/bin:$SDK/platform-tools:$PATH"
+
+          echo "===== JAVA ====="
+          java -version
+
+          echo "===== SDKMANAGER ====="
+          sdkmanager --version
 
           yes | sdkmanager --licenses >/dev/null || true
 
@@ -89,104 +133,43 @@ jobs:
 
           echo "ANDROID_NDK_HOME=$SDK/ndk/28.0.13004108" >> "$GITHUB_ENV"
 
-      - name: Initialize Buildozer
+      - name: Prepare Buildozer
+        env:
+          JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
         run: |
-          buildozer android clean || true
+          export JAVA_HOME="/usr/lib/jvm/java-17-openjdk-amd64"
+          export PATH="$JAVA_HOME/bin:$PATH"
 
-          buildozer -v android debug --help >/dev/null || true
+          echo "===== BUILD CONFIG ====="
+          java -version
+          python3 --version
+          buildozer --version
 
-          echo "===== python-for-android ====="
-          if [ -d ".buildozer/android/platform/python-for-android" ]; then
-            cd .buildozer/android/platform/python-for-android
-            git rev-parse HEAD || true
-            git describe --tags --always || true
-            git log -1 --oneline || true
-          else
-            echo "python-for-android non encore initialisé"
-          fi
-
-      - name: Prepare ReportLab recipe
-        run: |
-          P4A="$HOME/.buildozer/android/platform/python-for-android"
-          RECIPE="$P4A/pythonforandroid/recipes/reportlab"
-
-          echo "===== Recherche python-for-android ====="
-          if [ ! -d "$P4A" ]; then
-            echo "ERREUR: python-for-android introuvable"
-            exit 1
-          fi
-
-          echo "P4A=$P4A"
-
-          echo "===== Ancienne recette ReportLab ====="
-          if [ -f "$RECIPE/__init__.py" ]; then
-            sed -n '1,160p' "$RECIPE/__init__.py"
-          fi
-
-          mkdir -p "$RECIPE"
-
-          cat > "$RECIPE/__init__.py" <<'PYRECIPE'
-          from pythonforandroid.recipe import PythonRecipe
-
-
-          class ReportLabRecipe(PythonRecipe):
-            """
-            ReportLab recipe using the GitHub mirror instead of the
-            obsolete Mercurial hg.reportlab.com source.
-            """
-
-            version = "4.4.3"
-            url = "https://github.com/MrBitBucket/reportlab-mirror/archive/refs/tags/{version}.tar.gz"
-
-            depends = ["python3", "freetype"]
-
-            site_packages_name = "reportlab"
-
-
-            recipe = ReportLabRecipe()
-            PYRECIPE
-
-              echo "===== Nouvelle recette ReportLab ====="
-                cat "$RECIPE/__init__.py"
-
-      - name: Verify Android SDK
-        run: |
-          SDK="$HOME/.buildozer/android/platform/android-sdk"
-
-          export ANDROIDSDK="$SDK"
-          export ANDROID_HOME="$SDK"
-          export PATH="$SDK/cmdline-tools/latest/bin:$SDK/platform-tools:$PATH"
-
-          echo "===== sdkmanager ====="
-          sdkmanager --version
-
-          echo "===== Platforms ====="
-          ls -la "$SDK/platforms" || true
-
-          echo "===== Build Tools ====="
-          ls -la "$SDK/build-tools" || true
-
-          echo "===== AIDL ====="
-          if [ -x "$SDK/build-tools/33.0.2/aidl" ]; then
-            "$SDK/build-tools/33.0.2/aidl" --version
-          else
-            echo "AIDL introuvable"
-            exit 1
-          fi
+          echo "===== ANDROID VARIABLES ====="
+          echo "ANDROIDSDK=$ANDROIDSDK"
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          echo "ANDROID_NDK_HOME=$ANDROID_NDK_HOME"
 
       - name: Build APK
         env:
-          P4A_REPORTLAB_RECIPE: "1"
+          JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
         run: |
+          export JAVA_HOME="/usr/lib/jvm/java-17-openjdk-amd64"
+          export PATH="$JAVA_HOME/bin:$PATH"
+
+          echo "===== JAVA AVANT BUILDOZER ====="
+          java -version
+
+          echo "===== BUILDOZER BUILD ====="
           buildozer -v android debug
 
       - name: Check APK
         run: |
-          echo "===== APK généré ====="
+          echo "===== APK ====="
           find bin -type f -name "*.apk" -print
 
           if ! find bin -type f -name "*.apk" | grep -q .; then
-            echo "ERREUR: aucun APK généré"
+            echo "ERREUR : aucun APK généré"
             exit 1
           fi
 
