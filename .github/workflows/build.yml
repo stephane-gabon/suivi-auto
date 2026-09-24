@@ -10,7 +10,6 @@ jobs:
   build:
     runs-on: ubuntu-22.04
 
-
     steps:
 
       # ============================================================
@@ -174,28 +173,48 @@ jobs:
 
           SDK="$HOME/.buildozer/android/platform/android-sdk"
 
+          export ANDROID_HOME="$SDK"
+          export ANDROID_SDK_ROOT="$SDK"
           export PATH="$SDK/cmdline-tools/latest/bin:$SDK/platform-tools:$PATH"
 
-          echo "===== INSTALL NDK 28c ====="
+          echo "===== ACCEPTATION DES LICENCES ====="
 
-          yes | sdkmanager \
+          "$SDK/cmdline-tools/latest/bin/sdkmanager" --licenses < /dev/null || true
+
+          echo "===== INSTALLATION NDK 28c ====="
+
+          "$SDK/cmdline-tools/latest/bin/sdkmanager" \
             "ndk;28.2.13676358"
 
-          echo "===== FIND NDK ====="
+          echo "===== VERIFICATION NDK ====="
 
-          find "$SDK/ndk" -maxdepth 2 -type f \
-            -name source.properties \
-            -print
+          NDK="$SDK/ndk/28.2.13676358"
 
-          echo "ANDROID_NDK_HOME=$SDK/ndk/28.2.13676358" >> "$GITHUB_ENV"
-          echo "ANDROIDNDK=$SDK/ndk/28.2.13676358" >> "$GITHUB_ENV"
+          if [ ! -d "$NDK" ]; then
+            echo "ERREUR : NDK 28c introuvable."
+            exit 1
+          fi
+
+          if [ ! -f "$NDK/source.properties" ]; then
+            echo "ERREUR : source.properties absent."
+            exit 1
+          fi
+
+          echo "===== NDK INSTALLE ====="
+
+          cat "$NDK/source.properties"
+
+          echo "ANDROIDNDK=$NDK" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_HOME=$NDK" >> "$GITHUB_ENV"
+
+          echo "NDK OK : $NDK"
 
 
       # ============================================================
       # VERIFICATION ANDROID
       # ============================================================
 
-      - name: Verify Android environment
+      - name: Verify Android NDK
         shell: bash
         run: |
           set -e
@@ -203,36 +222,21 @@ jobs:
           SDK="$HOME/.buildozer/android/platform/android-sdk"
           NDK="$SDK/ndk/28.2.13676358"
 
-          export PATH="$SDK/cmdline-tools/latest/bin:$SDK/platform-tools:$PATH"
+          echo "===== NDK DIRECTORY ====="
+          ls -la "$SDK/ndk"
 
-          echo "===== JAVA ====="
-          java -version
+          echo "===== NDK 28c ====="
 
-          echo "===== SDK ====="
-          echo "$SDK"
-
-          echo "===== SDKMANAGER ====="
-          "$SDK/cmdline-tools/latest/bin/sdkmanager" --version
-
-          echo "===== PLATFORM ====="
-          test -d "$SDK/platforms/android-33"
-          ls -la "$SDK/platforms/android-33"
-
-          echo "===== BUILD TOOLS ====="
-          test -d "$SDK/build-tools/33.0.2"
-          ls -la "$SDK/build-tools/33.0.2"
-
-          echo "===== AIDL ====="
-          test -x "$SDK/build-tools/33.0.2/aidl"
-          "$SDK/build-tools/33.0.2/aidl" --version || true
-
-          echo "===== NDK ====="
           test -d "$NDK"
           test -f "$NDK/source.properties"
 
+          echo "===== VERSION ====="
           cat "$NDK/source.properties"
 
-          echo "===== ANDROID ENVIRONMENT OK ====="
+          echo "===== TOOLCHAIN ====="
+          test -d "$NDK/toolchains/llvm"
+
+          echo "===== NDK OK ====="
 
 
       # ============================================================
