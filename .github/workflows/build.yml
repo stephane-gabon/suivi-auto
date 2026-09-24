@@ -289,27 +289,35 @@ jobs:
       # REPORTLAB RECIPE
       # ============================================================
 
-      - name: Verify local ReportLab recipe
+      - name: Prepare local ReportLab source
         run: |
           set -euxo pipefail
 
-          echo "=========================================="
-          echo "Vérification recette ReportLab"
-          echo "=========================================="
+          RECIPE_DIR="$GITHUB_WORKSPACE/p4a-recipes/reportlab"
+          REPORTLAB_ARCHIVE="$RECIPE_DIR/reportlab-fe660f227cac.tar.gz"
+          REPORTLAB_SOURCE="$HOME/.buildozer/local-reportlab"
 
-          test -f p4a-recipes/reportlab/__init__.py
+          test -f "$RECIPE_DIR/__init__.py"
+          test -f "$REPORTLAB_ARCHIVE"
 
-          test -f p4a-recipes/reportlab/reportlab-fe660f227cac.tar.gz
+          rm -rf "$REPORTLAB_SOURCE"
+          mkdir -p "$REPORTLAB_SOURCE"
 
-          echo "Archive ReportLab :"
+          tar -xzf "$REPORTLAB_ARCHIVE" -C "$REPORTLAB_SOURCE"
 
-          ls -lh \
-            p4a-recipes/reportlab/reportlab-fe660f227cac.tar.gz
+          EXTRACTED_DIR="$(find "$REPORTLAB_SOURCE" -mindepth 1 -maxdepth 1 -type d -print -quit)"
 
-          echo "Recette ReportLab :"
+          if [ -z "$EXTRACTED_DIR" ]; then
+            echo "ERREUR : impossible de trouver le dossier ReportLab extrait."
+            find "$REPORTLAB_SOURCE" -maxdepth 2 -print
+            exit 1
+          fi
 
-          sed -n '1,200p' \
-            p4a-recipes/reportlab/__init__.py
+          echo "ReportLab source locale : $EXTRACTED_DIR"
+
+          echo "P4A_REPORTLAB_DIR=$EXTRACTED_DIR" >> "$GITHUB_ENV"
+
+          find "$EXTRACTED_DIR" -maxdepth 2 -type f | head -n 50
 
 
       # ============================================================
