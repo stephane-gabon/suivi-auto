@@ -19,38 +19,31 @@ jobs:
     steps:
 
       # ============================================================
-      # CHECKOUT
+      # 1. CHECKOUT
       # ============================================================
-
       - name: Checkout repository
         uses: actions/checkout@v4
 
-
       # ============================================================
-      # PYTHON
+      # 2. PYTHON
       # ============================================================
-
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.10"
 
-
       # ============================================================
-      # JAVA
+      # 3. JAVA
       # ============================================================
-
       - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
 
-
       # ============================================================
-      # SYSTEM DEPENDENCIES
+      # 4. SYSTEM DEPENDENCIES
       # ============================================================
-
       - name: Install system dependencies
         run: |
           set -euxo pipefail
@@ -60,8 +53,10 @@ jobs:
           sudo apt-get install -y \
             git \
             wget \
+            curl \
             zip \
             unzip \
+            tar \
             autoconf \
             automake \
             libtool \
@@ -70,11 +65,9 @@ jobs:
             libncurses5 \
             libncurses5-dev
 
-
       # ============================================================
-      # BUILDOZER + CYTHON
+      # 5. PYTHON BUILD TOOLS
       # ============================================================
-
       - name: Install Python build tools
         run: |
           set -euxo pipefail
@@ -85,22 +78,18 @@ jobs:
             buildozer==1.6.0 \
             cython==0.29.37
 
-
       # ============================================================
-      # INITIALISATION BUILDOZER
+      # 6. INITIALIZE BUILDOZER
       # ============================================================
-
       - name: Initialize Buildozer Android environment
         run: |
           set -euxo pipefail
 
           buildozer android clean || true
 
-
       # ============================================================
-      # ANDROID SDK ENVIRONMENT
+      # 7. CONFIGURE ANDROID SDK ENVIRONMENT
       # ============================================================
-
       - name: Configure Android SDK environment
         run: |
           set -euxo pipefail
@@ -121,21 +110,9 @@ jobs:
           echo "$SDK/platform-tools" >> "$GITHUB_PATH"
           echo "$SDK/build-tools/${ANDROID_BUILD_TOOLS}" >> "$GITHUB_PATH"
 
-          echo "=========================================="
-          echo "Android SDK configuration"
-          echo "=========================================="
-
-          echo "ANDROIDSDK=$SDK"
-          echo "ANDROID_HOME=$SDK"
-          echo "ANDROID_SDK_ROOT=$SDK"
-          echo "ANDROIDAPI=${ANDROID_API}"
-          echo "ANDROIDMINAPI=${ANDROID_MIN_API}"
-
-
       # ============================================================
-      # ANDROID SDK + COMMAND LINE TOOLS
+      # 8. INSTALL ANDROID COMMAND LINE TOOLS + SDK
       # ============================================================
-
       - name: Install Android SDK components
         run: |
           set -euxo pipefail
@@ -144,18 +121,15 @@ jobs:
           CMDLINE_TOOLS="$SDK/cmdline-tools/latest"
           SDKMANAGER="$CMDLINE_TOOLS/bin/sdkmanager"
 
-          echo "=========================================="
-          echo "Installation Android Command Line Tools"
-          echo "=========================================="
-
-          echo "SDK = $SDK"
-          echo "SDKMANAGER = $SDKMANAGER"
-
           mkdir -p "$SDK/cmdline-tools"
+
+          echo "Downloading Android Command Line Tools..."
 
           wget -q \
             "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip" \
             -O /tmp/commandlinetools.zip
+
+          test -s /tmp/commandlinetools.zip
 
           rm -rf "$CMDLINE_TOOLS"
 
@@ -165,34 +139,31 @@ jobs:
             /tmp/commandlinetools.zip \
             -d "$CMDLINE_TOOLS"
 
+          # Google place normalement les outils dans :
+          # cmdline-tools/latest/cmdline-tools/*
+          #
+          # On les déplace directement dans latest/
           if [ -d "$CMDLINE_TOOLS/cmdline-tools" ]; then
             mv "$CMDLINE_TOOLS/cmdline-tools/"* \
               "$CMDLINE_TOOLS/"
-
             rm -rf "$CMDLINE_TOOLS/cmdline-tools"
           fi
 
           chmod +x "$SDKMANAGER"
 
-          echo "=========================================="
-          echo "Vérification sdkmanager"
-          echo "=========================================="
+          echo "Checking sdkmanager..."
 
           test -x "$SDKMANAGER"
 
           "$SDKMANAGER" --version
 
-          echo "=========================================="
-          echo "Acceptation licences Android"
-          echo "=========================================="
+          echo "Accepting Android licenses..."
 
           yes | "$SDKMANAGER" \
             --sdk_root="$SDK" \
             --licenses >/dev/null 2>&1 || true
 
-          echo "=========================================="
-          echo "Installation des composants Android"
-          echo "=========================================="
+          echo "Installing Android SDK components..."
 
           "$SDKMANAGER" \
             --sdk_root="$SDK" \
@@ -200,9 +171,7 @@ jobs:
             "platforms;android-${ANDROID_API}" \
             "build-tools;${ANDROID_BUILD_TOOLS}"
 
-          echo "=========================================="
-          echo "Vérifications Android SDK"
-          echo "=========================================="
+          echo "Verifying Android SDK..."
 
           test -d "$SDK/platforms/android-${ANDROID_API}"
 
@@ -212,23 +181,11 @@ jobs:
 
           test -d "$SDK/platform-tools"
 
-          echo "SDK Manager :"
-          "$SDKMANAGER" --version
-
-          echo "Android Platform :"
-          ls -ld "$SDK/platforms/android-${ANDROID_API}"
-
-          echo "Build Tools :"
-          ls -ld "$SDK/build-tools/${ANDROID_BUILD_TOOLS}"
-
-          echo "Platform Tools :"
-          ls -ld "$SDK/platform-tools"
-
+          echo "Android SDK successfully installed."
 
       # ============================================================
-      # COMPATIBILITÉ BUILDOZER / SDKMANAGER
+      # 9. SDKMANAGER COMPATIBILITY FOR P4A
       # ============================================================
-
       - name: Configure sdkmanager compatibility
         run: |
           set -euxo pipefail
@@ -241,16 +198,6 @@ jobs:
 
           LEGACY_SDKMANAGER="$LEGACY_DIR/sdkmanager"
 
-          echo "=========================================="
-          echo "Configuration compatibilité sdkmanager"
-          echo "=========================================="
-
-          echo "SDK = $SDK"
-
-          echo "sdkmanager moderne = $MODERN_SDKMANAGER"
-
-          echo "sdkmanager legacy = $LEGACY_SDKMANAGER"
-
           test -x "$MODERN_SDKMANAGER"
 
           mkdir -p "$LEGACY_DIR"
@@ -259,71 +206,202 @@ jobs:
             "$MODERN_SDKMANAGER" \
             "$LEGACY_SDKMANAGER"
 
-          echo "Contenu de tools/bin :"
+          echo "Legacy sdkmanager path:"
 
           ls -la "$LEGACY_DIR"
 
-          echo "Test sdkmanager via chemin legacy :"
+          echo "sdkmanager version:"
 
           "$LEGACY_SDKMANAGER" --version
 
-          echo "sdkmanager legacy correctement configuré."
-
-
       # ============================================================
-      # CACHE BUILDOZER / PYTHON-FOR-ANDROID
+      # 10. CACHE BUILDOZER DOWNLOADS
       # ============================================================
-
       - name: Cache Buildozer downloads
         uses: actions/cache@v4
         with:
           path: |
             ~/.buildozer/android/packages
-            ~/.buildozer/android/platform
           key: buildozer-android-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}
           restore-keys: |
             buildozer-android-${{ runner.os }}-
 
+      # ============================================================
+      # 11. VERIFY LOCAL REPORTLAB RECIPE
+      # ============================================================
+      - name: Verify local ReportLab recipe
+        run: |
+          set -euxo pipefail
+
+          echo "Checking local ReportLab recipe..."
+
+          test -f \
+            "p4a-recipes/reportlab/__init__.py"
+
+          test -f \
+            "p4a-recipes/reportlab/reportlab-fe660f227cac.tar.gz"
+
+          echo "ReportLab recipe:"
+
+          ls -lh \
+            "p4a-recipes/reportlab/__init__.py"
+
+          echo "ReportLab archive:"
+
+          ls -lh \
+            "p4a-recipes/reportlab/reportlab-fe660f227cac.tar.gz"
+
+          echo "ReportLab recipe content:"
+
+          sed -n '1,240p' \
+            "p4a-recipes/reportlab/__init__.py"
 
       # ============================================================
-      # REPORTLAB RECIPE
+      # 12. VERIFY BUILDOZER SPEC
       # ============================================================
+      - name: Verify Buildozer local recipes configuration
+        run: |
+          set -euxo pipefail
 
+          echo "Checking buildozer.spec..."
+
+          test -f buildozer.spec
+
+          echo ""
+          echo "p4a.local_recipes configuration:"
+          grep -n \
+            "p4a.local_recipes" \
+            buildozer.spec \
+            || true
+
+          if ! grep -Eq \
+            '^[[:space:]]*p4a\.local_recipes[[:space:]]*=[[:space:]]*p4a-recipes' \
+            buildozer.spec
+          then
+            echo ""
+            echo "ERREUR :"
+            echo "buildozer.spec doit contenir :"
+            echo ""
+            echo "p4a.local_recipes = p4a-recipes"
+            echo ""
+            exit 1
+          fi
+
+          echo ""
+          echo "Local p4a recipes correctly configured."
+
+      # ============================================================
+      # 13. PREPARE LOCAL REPORTLAB SOURCE
+      # ============================================================
       - name: Prepare local ReportLab source
         run: |
           set -euxo pipefail
 
           RECIPE_DIR="$GITHUB_WORKSPACE/p4a-recipes/reportlab"
+
           REPORTLAB_ARCHIVE="$RECIPE_DIR/reportlab-fe660f227cac.tar.gz"
+
           REPORTLAB_SOURCE="$HOME/.buildozer/local-reportlab"
 
+          echo "Recipe directory:"
+          echo "$RECIPE_DIR"
+
+          echo "Archive:"
+          echo "$REPORTLAB_ARCHIVE"
+
+          echo "Local extraction directory:"
+          echo "$REPORTLAB_SOURCE"
+
           test -f "$RECIPE_DIR/__init__.py"
+
           test -f "$REPORTLAB_ARCHIVE"
 
           rm -rf "$REPORTLAB_SOURCE"
+
           mkdir -p "$REPORTLAB_SOURCE"
 
-          tar -xzf "$REPORTLAB_ARCHIVE" -C "$REPORTLAB_SOURCE"
+          echo "Testing ReportLab archive..."
 
-          EXTRACTED_DIR="$(find "$REPORTLAB_SOURCE" -mindepth 1 -maxdepth 1 -type d -print -quit)"
+          tar -tzf "$REPORTLAB_ARCHIVE" >/dev/null
+
+          echo "Extracting ReportLab..."
+
+          tar -xzf \
+            "$REPORTLAB_ARCHIVE" \
+            -C "$REPORTLAB_SOURCE"
+
+          echo "Extracted files:"
+
+          find "$REPORTLAB_SOURCE" \
+            -maxdepth 3 \
+            -type f \
+            -print \
+            | head -n 100
+
+          EXTRACTED_DIR="$(
+            find "$REPORTLAB_SOURCE" \
+              -mindepth 1 \
+              -maxdepth 1 \
+              -type d \
+              -print \
+              -quit
+          )"
 
           if [ -z "$EXTRACTED_DIR" ]; then
+            echo ""
             echo "ERREUR : impossible de trouver le dossier ReportLab extrait."
-            find "$REPORTLAB_SOURCE" -maxdepth 2 -print
+
+            find "$REPORTLAB_SOURCE" \
+              -maxdepth 3 \
+              -print
+
             exit 1
           fi
 
-          echo "ReportLab source locale : $EXTRACTED_DIR"
+          echo ""
+          echo "ReportLab source locale :"
+          echo "$EXTRACTED_DIR"
+
+          test -d "$EXTRACTED_DIR"
 
           echo "P4A_REPORTLAB_DIR=$EXTRACTED_DIR" >> "$GITHUB_ENV"
 
-          find "$EXTRACTED_DIR" -maxdepth 2 -type f | head -n 50
+      # ============================================================
+      # 14. VERIFY LOCAL REPORTLAB SOURCE
+      # ============================================================
+      - name: Verify local ReportLab source
+        run: |
+          set -euxo pipefail
 
+          echo "P4A_REPORTLAB_DIR:"
+          echo "$P4A_REPORTLAB_DIR"
+
+          test -n "$P4A_REPORTLAB_DIR"
+
+          test -d "$P4A_REPORTLAB_DIR"
+
+          echo ""
+          echo "ReportLab source directory:"
+
+          ls -la "$P4A_REPORTLAB_DIR"
+
+          echo ""
+          echo "ReportLab source files:"
+
+          find "$P4A_REPORTLAB_DIR" \
+            -maxdepth 2 \
+            -type f \
+            -print \
+            | head -n 100
+
+          echo ""
+          echo "IMPORTANT:"
+          echo "python-for-android will use this local source."
+          echo "It should NOT download ReportLab from hg.reportlab.com."
 
       # ============================================================
-      # CLEAN PROJECT BUILD
+      # 15. CLEAN BUILDOZER BUILD DIRECTORIES
       # ============================================================
-
       - name: Clean Buildozer build directories
         run: |
           set -euxo pipefail
@@ -334,129 +412,158 @@ jobs:
 
           mkdir -p bin
 
-
       # ============================================================
-      # FINAL ANDROID ENVIRONMENT CHECK
+      # 16. VERIFY COMPLETE ANDROID ENVIRONMENT
       # ============================================================
-
       - name: Verify Android environment before Buildozer
         run: |
           set -euxo pipefail
 
           SDK="$ANDROID_SDK_ROOT"
 
-          echo "=========================================="
-          echo "Environnement Android final"
-          echo "=========================================="
+          echo "=================================================="
+          echo "ANDROID ENVIRONMENT"
+          echo "=================================================="
 
-          echo "ANDROIDSDK:"
-          echo "$ANDROIDSDK"
+          echo "ANDROIDSDK=$ANDROIDSDK"
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+          echo "ANDROIDAPI=$ANDROIDAPI"
+          echo "ANDROIDMINAPI=$ANDROIDMINAPI"
 
-          echo "ANDROID_HOME:"
-          echo "$ANDROID_HOME"
+          echo ""
+          echo "=================================================="
+          echo "REPORTLAB"
+          echo "=================================================="
 
-          echo "ANDROID_SDK_ROOT:"
-          echo "$ANDROID_SDK_ROOT"
+          echo "P4A_REPORTLAB_DIR=$P4A_REPORTLAB_DIR"
 
-          echo "ANDROIDAPI:"
-          echo "$ANDROIDAPI"
+          test -n "$P4A_REPORTLAB_DIR"
 
-          echo "ANDROIDMINAPI:"
-          echo "$ANDROIDMINAPI"
+          test -d "$P4A_REPORTLAB_DIR"
 
-          echo "sdkmanager moderne:"
+          echo ""
+          echo "=================================================="
+          echo "SDKMANAGER"
+          echo "=================================================="
 
           "$SDK/cmdline-tools/latest/bin/sdkmanager" --version
 
-          echo "sdkmanager legacy:"
-
           "$SDK/tools/bin/sdkmanager" --version
 
-          echo "AIDL:"
+          echo ""
+          echo "=================================================="
+          echo "AIDL"
+          echo "=================================================="
 
-          "$SDK/build-tools/${ANDROID_BUILD_TOOLS}/aidl" --help >/dev/null
+          "$SDK/build-tools/${ANDROID_BUILD_TOOLS}/aidl" \
+            --help >/dev/null
 
-          echo "Java:"
+          echo ""
+          echo "=================================================="
+          echo "JAVA"
+          echo "=================================================="
 
           java -version
 
-          echo "Python:"
+          echo ""
+          echo "=================================================="
+          echo "PYTHON"
+          echo "=================================================="
 
           python --version
 
-          echo "Cython:"
+          echo ""
+          echo "=================================================="
+          echo "CYTHON"
+          echo "=================================================="
 
           cython --version
 
-          echo "Buildozer:"
+          echo ""
+          echo "=================================================="
+          echo "BUILDOZER"
+          echo "=================================================="
 
           buildozer --version
 
+          echo ""
+          echo "=================================================="
+          echo "P4A REPORTLAB SOURCE"
+          echo "=================================================="
+
+          find "$P4A_REPORTLAB_DIR" \
+            -maxdepth 2 \
+            -type f \
+            -print \
+            | head -n 50
 
       # ============================================================
-      # BUILDOZER BUILD
+      # 17. BUILD APK
       # ============================================================
-
       - name: Build Android APK
         run: |
           set -uo pipefail
 
+          # --------------------------------------------------------
+          # Android environment
+          # --------------------------------------------------------
+
           export ANDROIDSDK="$ANDROID_SDK_ROOT"
+
           export ANDROID_HOME="$ANDROID_SDK_ROOT"
+
           export ANDROID_SDK_ROOT="$ANDROID_SDK_ROOT"
 
           export ANDROIDAPI="$ANDROID_API"
+
           export ANDROIDMINAPI="$ANDROID_MIN_API"
 
-          # ========================================================
-          # NDK
-          # ========================================================
+          # --------------------------------------------------------
+          # IMPORTANT:
+          # Do NOT force an NDK version here.
           #
-          # GitHub Runner possède plusieurs NDK préinstallés.
-          # On ne veut pas que ceux-ci interfèrent avec le NDK
-          # sélectionné par python-for-android.
-          #
-          # python-for-android utilise ici :
-          # android-ndk-r28c
-          #
+          # python-for-android will select the recommended NDK,
+          # currently r28c for this build.
+          # --------------------------------------------------------
 
           unset ANDROID_NDK
           unset ANDROID_NDK_HOME
           unset ANDROID_NDK_ROOT
 
-          # ========================================================
+          # --------------------------------------------------------
+          # Local ReportLab source
+          # --------------------------------------------------------
+
+          export P4A_REPORTLAB_DIR="$P4A_REPORTLAB_DIR"
+
+          # --------------------------------------------------------
           # PATH
-          # ========================================================
+          # --------------------------------------------------------
 
           export PATH="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$ANDROID_SDK_ROOT/tools/bin:$ANDROID_SDK_ROOT/platform-tools:$ANDROID_SDK_ROOT/build-tools/${ANDROID_BUILD_TOOLS}:$PATH"
 
-          # ========================================================
-          # PARAMÈTRES RÉSEAU P4A
-          # ========================================================
+          # --------------------------------------------------------
+          # Diagnostics
+          # --------------------------------------------------------
 
-          export P4A_DOWNLOAD_RETRIES=10
-          export P4A_DOWNLOAD_TIMEOUT=120
+          echo ""
+          echo "=================================================="
+          echo "BUILDOZER BUILD"
+          echo "=================================================="
 
-          # ========================================================
-          # ENVIRONNEMENT
-          # ========================================================
-
-          echo "=========================================="
-          echo "ENVIRONNEMENT AVANT BUILDOZER"
-          echo "=========================================="
-
-          echo "JAVA_HOME=$JAVA_HOME"
-
-          echo "ANDROIDSDK=$ANDROIDSDK"
-
-          echo "ANDROID_HOME=$ANDROID_HOME"
-
+          echo ""
           echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
 
-          echo "ANDROIDAPI=$ANDROIDAPI"
+          echo "ANDROID_API=$ANDROID_API"
 
-          echo "ANDROIDMINAPI=$ANDROIDMINAPI"
+          echo "ANDROID_MIN_API=$ANDROID_MIN_API"
 
+          echo "ANDROID_BUILD_TOOLS=$ANDROID_BUILD_TOOLS"
+
+          echo "P4A_REPORTLAB_DIR=$P4A_REPORTLAB_DIR"
+
+          echo ""
           echo "ANDROID_NDK=${ANDROID_NDK-<unset>}"
 
           echo "ANDROID_NDK_HOME=${ANDROID_NDK_HOME-<unset>}"
@@ -465,96 +572,159 @@ jobs:
 
           echo "ANDROIDNDK=${ANDROIDNDK-<unset>}"
 
-          echo "P4A_DOWNLOAD_RETRIES=$P4A_DOWNLOAD_RETRIES"
+          echo ""
+          echo "ReportLab source:"
 
-          echo "P4A_DOWNLOAD_TIMEOUT=$P4A_DOWNLOAD_TIMEOUT"
+          ls -la "$P4A_REPORTLAB_DIR"
 
-          echo "=========================================="
-          echo "CACHE BUILDOZER"
-          echo "=========================================="
+          # --------------------------------------------------------
+          # Verify local ReportLab again immediately before build
+          # --------------------------------------------------------
+
+          test -n "$P4A_REPORTLAB_DIR"
+
+          test -d "$P4A_REPORTLAB_DIR"
+
+          # --------------------------------------------------------
+          # Buildozer packages cache
+          # --------------------------------------------------------
 
           mkdir -p "$HOME/.buildozer/android/packages"
+
+          echo ""
 
           du -sh \
             "$HOME/.buildozer/android/packages" \
             2>/dev/null || true
 
-          echo "=========================================="
-          echo "LANCEMENT BUILDOZER"
-          echo "=========================================="
+          # --------------------------------------------------------
+          # Run Buildozer
+          # --------------------------------------------------------
 
           set +e
 
-          buildozer -v android debug 2>&1 | tee buildozer-full.log
+          buildozer -v android debug \
+            2>&1 | tee buildozer-full.log
 
           BUILDOZER_STATUS=${PIPESTATUS[0]}
 
           set -e
 
-          echo "=========================================="
-          echo "FIN BUILDOZER"
-          echo "=========================================="
+          # --------------------------------------------------------
+          # Extract useful network/download diagnostics
+          # --------------------------------------------------------
 
-          echo "Code retour Buildozer = $BUILDOZER_STATUS"
-
-          echo "=========================================="
-          echo "RECHERCHE DES ERREURS RÉSEAU"
-          echo "=========================================="
+          echo ""
+          echo "=================================================="
+          echo "DOWNLOAD / NETWORK DIAGNOSTICS"
+          echo "=================================================="
 
           grep -Ei \
-            'HTTP Error|502|503|504|Gateway|Download failed|urllib|timeout|timed out' \
+            'HTTP Error|403|401|404|429|500|502|503|504|Gateway|Download failed|urllib|timeout|timed out' \
             buildozer-full.log \
-            | tail -n 100 \
+            | tail -n 150 \
             || true
 
-          echo "=========================================="
-          echo "DERNIÈRES LIGNES DU LOG"
-          echo "=========================================="
+          # --------------------------------------------------------
+          # Check specifically for unwanted ReportLab download
+          # --------------------------------------------------------
 
-          tail -n 200 buildozer-full.log
+          echo ""
+          echo "=================================================="
+          echo "REPORTLAB DOWNLOAD CHECK"
+          echo "=================================================="
+
+          if grep -Fq \
+            "hg.reportlab.com/hg-public/reportlab/archive/fe660f227cac.tar.gz" \
+            buildozer-full.log
+          then
+            echo ""
+            echo "ERREUR : python-for-android a encore essayé"
+            echo "de télécharger ReportLab depuis hg.reportlab.com."
+            echo ""
+            echo "P4A_REPORTLAB_DIR=$P4A_REPORTLAB_DIR"
+            echo ""
+
+            grep -Fn \
+              "hg.reportlab.com" \
+              buildozer-full.log \
+              | tail -n 20
+
+            echo ""
+            echo "Vérifier buildozer.spec :"
+            grep -n \
+              "p4a.local_recipes" \
+              buildozer.spec \
+              || true
+
+            exit 1
+          fi
+
+          echo "Aucun téléchargement ReportLab distant détecté."
+
+          # --------------------------------------------------------
+          # Show final log
+          # --------------------------------------------------------
+
+          echo ""
+          echo "=================================================="
+          echo "LAST 250 LOG LINES"
+          echo "=================================================="
+
+          tail -n 250 buildozer-full.log
+
+          # --------------------------------------------------------
+          # Return actual Buildozer status
+          # --------------------------------------------------------
 
           exit "$BUILDOZER_STATUS"
 
-
       # ============================================================
-      # APK VERIFICATION
+      # 18. VERIFY APK
       # ============================================================
-
       - name: Verify APK
         run: |
           set -euxo pipefail
 
-          echo "=========================================="
-          echo "Vérification APK"
-          echo "=========================================="
-
-          echo "Contenu de bin/ :"
+          echo "Searching for APK..."
 
           find bin \
             -maxdepth 2 \
             -type f \
             -print
 
-          APK="$(find bin -type f -name '*.apk' -print -quit)"
+          APK="$(
+            find bin \
+              -type f \
+              -name '*.apk' \
+              -print \
+              -quit
+          )"
 
           if [ -z "$APK" ]; then
+            echo ""
             echo "ERREUR : aucun APK généré."
+
+            echo ""
+            echo "Contents of bin/:"
+
+            find bin \
+              -maxdepth 3 \
+              -print
+
             exit 1
           fi
 
-          echo "APK généré :"
+          echo ""
+          echo "APK generated successfully:"
 
           echo "$APK"
 
-          echo "Taille :"
-
           ls -lh "$APK"
 
-
       # ============================================================
-      # UPLOAD APK
+      # 19. UPLOAD APK
       # ============================================================
-
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
@@ -562,11 +732,9 @@ jobs:
           path: bin/*.apk
           if-no-files-found: error
 
-
       # ============================================================
-      # UPLOAD LOG BUILDOZER
+      # 20. UPLOAD BUILDOZER LOG
       # ============================================================
-
       - name: Upload Buildozer diagnostic log
         if: always()
         uses: actions/upload-artifact@v4
