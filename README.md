@@ -1,7 +1,7 @@
 # Suivi Auto — Application mobile de suivi d'entretien automobile
 
 Application Kivy (Python) pour suivre l'entretien, le carburant et les coûts
-de plusieurs véhicules, avec export PDF/Excel. Devise par défaut : **FCFA (XAF)**.
+de plusieurs véhicules, avec export Excel. Devise par défaut : **FCFA (XAF)**.
 
 ## Structure du projet
 
@@ -18,7 +18,7 @@ car_maintenance_app/
 │   ├── rapports_screen.py     # Rapports : coûts par catégorie + export
 │   └── parametres_screen.py   # Paramètres : véhicules + devise
 ├── utils/
-│   ├── export_utils.py        # Génération PDF (ReportLab) / Excel (OpenPyXL)
+│   ├── export_utils.py        # Génération Excel (OpenPyXL)
 │   └── notification_utils.py  # Notifications push (Plyer) + logique d'alerte
 ├── exports/                   # Rapports générés (créé automatiquement)
 └── requirements.txt
@@ -63,7 +63,7 @@ android.permissions = CAMERA, READ_EXTERNAL_STORAGE, WRITE_EXTERNAL_STORAGE, POS
 - ✅ Alertes automatiques (km restant ≤ 500, échéance ≤ 14 jours) avec pop-up + notification push
 - ✅ Carburant : saisie des pleins, calcul de consommation moyenne (L/100km)
 - ✅ Rapports : synthèse par catégorie (barres), filtres trimestre/semestre/année/tout
-- ✅ Export PDF (ReportLab) et Excel (OpenPyXL/Pandas), dossier `exports/`
+- ✅ Export Excel (OpenPyXL/Pandas), dossier `exports/`
 - ✅ Devise configurable (FCFA par défaut)
 - ✅ Thème visuel sobre : blanc / gris clair / bleu, police Roboto
 
