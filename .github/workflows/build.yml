@@ -1178,49 +1178,115 @@ jobs:
       # ========================================================
       # 19 - COMPILATION APK
       # ========================================================
-
+      # ================================================================
+      # ÉTAPE 19 - CONSTRUCTION DE L'APK ANDROID
+      # ================================================================
+      # Buildozer produit énormément de lignes de logs.
+      #
+      # On enregistre donc TOUT le journal dans buildozer.log.
+      # En cas d'échec, le code retour réel de Buildozer est conservé.
+      # Une étape suivante pourra ensuite afficher automatiquement
+      # les dernières lignes et rechercher les erreurs importantes.
+      # ================================================================
       - name: "19 - Construire l'APK Android"
         shell: bash
         run: |
+          # Ne pas arrêter immédiatement le script lorsque Buildozer échoue :
+          # nous voulons d'abord récupérer son code retour et son journal.
+          set +e
 
-          set -euo pipefail
-
-          echo
-          echo "================================================"
-          echo "DÉBUT DE LA COMPILATION ANDROID"
-          echo "================================================"
-
-          echo
-          echo "SDK utilisé :"
-          echo "${ANDROID_SDK_ROOT}"
-
-          echo
-          echo "sdkmanager moderne :"
-          echo "${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager"
-
-          echo
-          echo "wrapper utilisé par Buildozer 1.6.0 :"
-          echo "${ANDROID_SDK_ROOT}/tools/bin/sdkmanager"
-
-          echo
-          echo "Test du wrapper :"
-          "${ANDROID_SDK_ROOT}/tools/bin/sdkmanager" --version
-
-          echo
-          echo "Lancement de Buildozer..."
-
-          # Buildozer 1.6.0 va rechercher :
+          # Exécution de Buildozer.
           #
-          #   tools/bin/sdkmanager
-          #
-          # Le wrapper créé à l'étape 13 redirige cet appel
-          # vers le sdkmanager moderne.
-          buildozer android debug
+          # tee permet :
+          #   1. d'afficher le journal dans GitHub Actions ;
+          #   2. de sauvegarder le journal dans buildozer.log.
+          buildozer -v android debug 2>&1 | tee buildozer.log
 
-          echo
-          echo "================================================"
-          echo "COMPILATION TERMINÉE"
-          echo "================================================"
+          # PIPESTATUS[0] correspond au code retour de Buildozer,
+          # et non à celui de "tee".
+          BUILD_EXIT_CODE=${PIPESTATUS[0]}
+
+          echo ""
+          echo "============================================================"
+          echo "CODE RETOUR BUILDOZER : ${BUILD_EXIT_CODE}"
+          echo "============================================================"
+
+          # On termine avec le véritable code retour de Buildozer.
+          # Ainsi GitHub Actions considérera bien l'étape comme échouée
+          # si Buildozer a échoué.
+          exit "${BUILD_EXIT_CODE}"
+
+
+      # ================================================================
+      # ÉTAPE 20 - DIAGNOSTIC AUTOMATIQUE EN CAS D'ÉCHEC
+      # ================================================================
+      # Cette étape s'exécute même si l'étape précédente a échoué.
+      #
+      # Elle affiche :
+      #   - les dernières lignes du journal ;
+      #   - les lignes contenant les erreurs importantes.
+      #
+      # Cela permet d'éviter de parcourir manuellement des dizaines
+      # de milliers de lignes dans GitHub Actions.
+      # ================================================================
+      - name: "20 - Diagnostic de l'échec Buildozer"
+        if: failure()
+        shell: bash
+        run: |
+          echo ""
+          echo "############################################################"
+          echo "# FIN DU JOURNAL BUILDOZER - 300 DERNIÈRES LIGNES"
+          echo "############################################################"
+
+          # Affiche les 300 dernières lignes du build.
+          # Le "|| true" évite qu'une absence de fichier masque
+          # l'erreur originale.
+          tail -n 300 buildozer.log || true
+
+
+          echo ""
+          echo "############################################################"
+          echo "# ERREURS IMPORTANTES DÉTECTÉES"
+          echo "############################################################"
+
+          # Recherche les messages généralement associés à une erreur.
+          #
+          # -i : ignore les majuscules/minuscules
+          # -n : affiche le numéro de ligne
+          # -E : utilise plusieurs motifs
+          #
+          # "|| true" est volontaire :
+          # grep ne doit pas faire échouer l'étape s'il ne trouve rien.
+          grep -nEi \
+            'error:|error |ERROR:|FAILED|Traceback|ErrorReturnCode|command failed|returned non-zero|No such file|not found|cannot find|undefined reference' \
+            buildozer.log \
+            | tail -n 150 \
+            || true
+
+
+          echo ""
+          echo "############################################################"
+          echo "# FIN DU DIAGNOSTIC"
+          echo "############################################################"
+
+
+      # ================================================================
+      # ÉTAPE 21 - SAUVEGARDE DU LOG COMPLET
+      # ================================================================
+      # Cette étape permet de conserver le journal complet même lorsque
+      # le build échoue.
+      #
+      # Le fichier buildozer.log sera disponible dans les artefacts
+      # GitHub Actions et pourra être téléchargé pour analyse.
+      # ================================================================
+      - name: "21 - Sauvegarder le journal Buildozer"
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: buildozer-log
+          path: buildozer.log
+          if-no-files-found: warn
+
 
 
       # ========================================================
