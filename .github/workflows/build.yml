@@ -56,6 +56,26 @@
 #
 # et évite également qu'il tente de sélectionner une version
 # différente des Build Tools, par exemple build-tools;37.0.0.
+#
+#
+# COMPATIBILITÉ SDKMANAGER
+# ------------------------
+# Les Android Command-Line Tools modernes installent sdkmanager
+# dans :
+#
+#   .android-sdk/cmdline-tools/latest/bin/sdkmanager
+#
+# Certaines versions de Buildozer / python-for-android recherchent
+# encore sdkmanager dans :
+#
+#   .android-sdk/tools/bin/sdkmanager
+#
+# Le workflow crée donc un lien symbolique de compatibilité :
+#
+#   tools/bin -> cmdline-tools/latest/bin
+#
+# Le SDK moderne reste ainsi utilisé, tout en étant compatible
+# avec les outils qui utilisent encore l'ancien chemin.
 # ================================================================
 
 
@@ -446,6 +466,10 @@ jobs:
 
           mkdir -p "${SDK_ROOT}/cmdline-tools/latest"
 
+          rm -rf "${RUNNER_TEMP}/android-cmdline-tools"
+
+          mkdir -p "${RUNNER_TEMP}/android-cmdline-tools"
+
           unzip \
             -q \
             "${CMDLINE_ZIP}" \
@@ -474,7 +498,7 @@ jobs:
             echo "ERREUR : sdkmanager est introuvable."
 
             find "${SDK_ROOT}" \
-              -maxdepth 5 \
+              -maxdepth 6 \
               -type f \
               -name sdkmanager \
               -print \
@@ -523,6 +547,8 @@ jobs:
           # ------------------------------------------------------
 
           echo "${SDK_ROOT}/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
+
+          echo "${SDK_ROOT}/tools/bin" >> "$GITHUB_PATH"
 
           echo "${SDK_ROOT}/platform-tools" >> "$GITHUB_PATH"
 
@@ -709,6 +735,215 @@ jobs:
 
 
       # ==========================================================
+      # 11 BIS - COMPATIBILITÉ SDKMANAGER POUR BUILDOZER / P4A
+      # ==========================================================
+      #
+      # PROBLÈME RÉSOLU PAR CETTE ÉTAPE
+      # --------------------------------
+      #
+      # Les Android Command-Line Tools modernes installent
+      # sdkmanager dans :
+      #
+      #   .android-sdk/cmdline-tools/latest/bin/sdkmanager
+      #
+      # Cependant, certaines versions de la chaîne
+      # Buildozer / python-for-android recherchent encore :
+      #
+      #   .android-sdk/tools/bin/sdkmanager
+      #
+      # Le log précédent indiquait précisément :
+      #
+      #   sdkmanager path
+      #   "/home/runner/work/suivi-auto/suivi-auto/.android-sdk/tools/bin/sdkmanager"
+      #   does not exist
+      #
+      # Nous créons donc ici un lien symbolique :
+      #
+      #   .android-sdk/tools/bin
+      #       ->
+      #   .android-sdk/cmdline-tools/latest/bin
+      #
+      # IMPORTANT :
+      #
+      # Nous ne réinstallons pas un ancien sdkmanager.
+      #
+      # Le sdkmanager moderne reste l'exécutable réel.
+      # Le chemin "tools/bin" sert uniquement de compatibilité.
+      # ==========================================================
+
+      - name: "11 BIS - Créer la compatibilité sdkmanager"
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          SDK_ROOT="${ANDROID_SDK_ROOT_PATH}"
+
+          SDKMANAGER_MODERN="${SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager"
+
+          SDKMANAGER_LEGACY="${SDK_ROOT}/tools/bin/sdkmanager"
+
+          echo "================================================"
+          echo "COMPATIBILITÉ SDKMANAGER"
+          echo "================================================"
+
+          echo
+          echo "SDK_ROOT :"
+          echo "${SDK_ROOT}"
+
+          echo
+          echo "sdkmanager moderne :"
+          echo "${SDKMANAGER_MODERN}"
+
+          echo
+          echo "sdkmanager legacy :"
+          echo "${SDKMANAGER_LEGACY}"
+
+
+          # ------------------------------------------------------
+          # Vérification du sdkmanager moderne.
+          # ------------------------------------------------------
+
+          if [ ! -f "${SDKMANAGER_MODERN}" ]; then
+
+            echo
+            echo "ERREUR : sdkmanager moderne introuvable."
+
+            echo
+            echo "Recherche de sdkmanager dans le SDK :"
+
+            find "${SDK_ROOT}" \
+              -maxdepth 8 \
+              -type f \
+              -name sdkmanager \
+              -print \
+              || true
+
+            exit 1
+          fi
+
+
+          # ------------------------------------------------------
+          # Rendre sdkmanager exécutable.
+          # ------------------------------------------------------
+
+          chmod +x "${SDKMANAGER_MODERN}"
+
+
+          # ------------------------------------------------------
+          # Création du répertoire legacy.
+          # ------------------------------------------------------
+
+          mkdir -p "${SDK_ROOT}/tools"
+
+
+          # ------------------------------------------------------
+          # Si tools/bin existe déjà, il peut s'agir :
+          #
+          # - d'un ancien lien ;
+          # - d'un ancien répertoire ;
+          # - d'un contenu partiel.
+          #
+          # Nous le supprimons afin de créer un lien propre.
+          # ------------------------------------------------------
+
+          if [ -e "${SDK_ROOT}/tools/bin" ] || \
+             [ -L "${SDK_ROOT}/tools/bin" ]; then
+
+            echo
+            echo "Suppression de l'ancien chemin :"
+            echo "${SDK_ROOT}/tools/bin"
+
+            rm -rf "${SDK_ROOT}/tools/bin"
+          fi
+
+
+          # ------------------------------------------------------
+          # Création du lien symbolique.
+          # ------------------------------------------------------
+
+          ln -s \
+            "${SDK_ROOT}/cmdline-tools/latest/bin" \
+            "${SDK_ROOT}/tools/bin"
+
+
+          # ------------------------------------------------------
+          # Vérification du chemin moderne.
+          # ------------------------------------------------------
+
+          if [ ! -x "${SDKMANAGER_MODERN}" ]; then
+
+            echo
+            echo "ERREUR : sdkmanager moderne n'est pas exécutable."
+
+            exit 1
+          fi
+
+
+          # ------------------------------------------------------
+          # Vérification du chemin legacy.
+          #
+          # C'est cette vérification qui protège contre l'erreur
+          # rencontrée lors de la compilation précédente.
+          # ------------------------------------------------------
+
+          if [ ! -x "${SDKMANAGER_LEGACY}" ]; then
+
+            echo
+            echo "ERREUR : le chemin legacy de sdkmanager"
+            echo "n'est pas accessible :"
+
+            echo
+            echo "${SDKMANAGER_LEGACY}"
+
+            echo
+            echo "Contenu de tools/ :"
+
+            ls -la "${SDK_ROOT}/tools" \
+              || true
+
+            exit 1
+          fi
+
+
+          # ------------------------------------------------------
+          # Affichage du lien symbolique.
+          # ------------------------------------------------------
+
+          echo
+          echo "Lien symbolique créé :"
+
+          ls -la "${SDK_ROOT}/tools"
+
+
+          # ------------------------------------------------------
+          # Test du sdkmanager moderne.
+          # ------------------------------------------------------
+
+          echo
+          echo "Test sdkmanager moderne :"
+
+          "${SDKMANAGER_MODERN}" \
+            --version
+
+
+          # ------------------------------------------------------
+          # Test du sdkmanager legacy.
+          # ------------------------------------------------------
+
+          echo
+          echo "Test sdkmanager legacy :"
+
+          "${SDKMANAGER_LEGACY}" \
+            --version
+
+
+          echo
+          echo "================================================"
+          echo "COMPATIBILITÉ SDKMANAGER : OK"
+          echo "================================================"
+
+
+      # ==========================================================
       # 12 - VÉRIFICATION DES OUTILS ANDROID
       # ==========================================================
 
@@ -719,18 +954,52 @@ jobs:
 
           SDK_ROOT="${ANDROID_SDK_ROOT_PATH}"
 
+          SDKMANAGER_MODERN="${SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager"
+
+          SDKMANAGER_LEGACY="${SDK_ROOT}/tools/bin/sdkmanager"
+
           echo "================================================"
           echo "VÉRIFICATION DU SDK ANDROID"
           echo "================================================"
 
+
           # ------------------------------------------------------
-          # sdkmanager
+          # sdkmanager moderne
           # ------------------------------------------------------
 
           echo
-          echo "sdkmanager :"
+          echo "sdkmanager moderne :"
 
-          "${SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager" \
+          if [ ! -x "${SDKMANAGER_MODERN}" ]; then
+            echo
+            echo "ERREUR : sdkmanager moderne introuvable :"
+            echo "${SDKMANAGER_MODERN}"
+
+            exit 1
+          fi
+
+          "${SDKMANAGER_MODERN}" \
+            --version
+
+
+          # ------------------------------------------------------
+          # sdkmanager legacy.
+          #
+          # Buildozer / python-for-android peut utiliser ce chemin.
+          # ------------------------------------------------------
+
+          echo
+          echo "sdkmanager legacy :"
+
+          if [ ! -x "${SDKMANAGER_LEGACY}" ]; then
+            echo
+            echo "ERREUR : sdkmanager legacy introuvable :"
+            echo "${SDKMANAGER_LEGACY}"
+
+            exit 1
+          fi
+
+          "${SDKMANAGER_LEGACY}" \
             --version
 
 
@@ -776,6 +1045,7 @@ jobs:
           echo "API Android :"
 
           if [ ! -d "${SDK_ROOT}/platforms/android-${ANDROID_API}" ]; then
+
             echo
             echo "ERREUR : Android API ${ANDROID_API}"
             echo "n'est pas installée."
@@ -794,6 +1064,7 @@ jobs:
           echo "Build Tools :"
 
           if [ ! -d "${SDK_ROOT}/build-tools/${ANDROID_BUILD_TOOLS}" ]; then
+
             echo
             echo "ERREUR : Build Tools ${ANDROID_BUILD_TOOLS}"
             echo "ne sont pas installés."
@@ -814,6 +1085,7 @@ jobs:
           NDK_PROPERTIES="${SDK_ROOT}/ndk/${ANDROID_NDK_VERSION}/source.properties"
 
           if [ ! -f "${NDK_PROPERTIES}" ]; then
+
             echo
             echo "ERREUR : source.properties du NDK est introuvable :"
             echo "${NDK_PROPERTIES}"
@@ -822,6 +1094,7 @@ jobs:
           fi
 
           cat "${NDK_PROPERTIES}"
+
 
           echo
           echo "================================================"
@@ -862,13 +1135,16 @@ jobs:
           echo "VÉRIFICATION BUILDOZER.SPEC"
           echo "================================================"
 
+
           # ------------------------------------------------------
           # Vérification de l'existence du fichier.
           # ------------------------------------------------------
 
           if [ ! -f buildozer.spec ]; then
+
             echo
             echo "ERREUR : buildozer.spec est introuvable."
+
             exit 1
           fi
 
@@ -891,8 +1167,10 @@ jobs:
           # ------------------------------------------------------
 
           if ! grep -qE '^\[app\][[:space:]]*$' buildozer.spec; then
+
             echo
             echo "ERREUR : la section [app] est absente."
+
             exit 1
           fi
 
@@ -905,11 +1183,14 @@ jobs:
           # ------------------------------------------------------
 
           if grep -qE '^\[app:android\][[:space:]]*$' buildozer.spec; then
+
             echo
             echo "ERREUR : une section [app:android] existe encore."
+
             echo
             echo "Les paramètres Android doivent être placés"
             echo "directement dans [app]."
+
             exit 1
           fi
 
@@ -921,11 +1202,16 @@ jobs:
           # ------------------------------------------------------
 
           check_property() {
+
             local property="$1"
 
-            if ! grep -qE "^[[:space:]]*${property}[[:space:]]*=" buildozer.spec; then
+            if ! grep -qE \
+              "^[[:space:]]*${property}[[:space:]]*=" \
+              buildozer.spec; then
+
               echo
               echo "ERREUR : propriété absente : ${property}"
+
               exit 1
             fi
           }
@@ -958,6 +1244,7 @@ jobs:
           # ------------------------------------------------------
 
           get_property() {
+
             local property="$1"
 
             awk -F'=' -v key="${property}" '
@@ -984,9 +1271,12 @@ jobs:
           ANDROID_API_VALUE="$(get_property "android.api")"
 
           if [ "${ANDROID_API_VALUE}" != "33" ]; then
+
             echo
             echo "ERREUR : android.api doit être 33."
+
             echo "Valeur détectée : ${ANDROID_API_VALUE}"
+
             exit 1
           fi
 
@@ -998,9 +1288,12 @@ jobs:
           ANDROID_MIN_API_VALUE="$(get_property "android.minapi")"
 
           if [ "${ANDROID_MIN_API_VALUE}" != "24" ]; then
+
             echo
             echo "ERREUR : android.minapi doit être 24."
+
             echo "Valeur détectée : ${ANDROID_MIN_API_VALUE}"
+
             exit 1
           fi
 
@@ -1012,9 +1305,12 @@ jobs:
           ANDROID_BUILD_TOOLS_VALUE="$(get_property "android.sdk_build_tools")"
 
           if [ "${ANDROID_BUILD_TOOLS_VALUE}" != "34.0.0" ]; then
+
             echo
             echo "ERREUR : android.sdk_build_tools doit être 34.0.0."
+
             echo "Valeur détectée : ${ANDROID_BUILD_TOOLS_VALUE}"
+
             exit 1
           fi
 
@@ -1026,9 +1322,12 @@ jobs:
           ANDROID_NDK_VALUE="$(get_property "android.ndk")"
 
           if [ "${ANDROID_NDK_VALUE}" != "28c" ]; then
+
             echo
             echo "ERREUR : android.ndk doit être 28c."
+
             echo "Valeur détectée : ${ANDROID_NDK_VALUE}"
+
             exit 1
           fi
 
@@ -1040,9 +1339,12 @@ jobs:
           ANDROID_SDK_PATH_VALUE="$(get_property "android.sdk_path")"
 
           if [ "${ANDROID_SDK_PATH_VALUE}" != ".android-sdk" ]; then
+
             echo
             echo "ERREUR : android.sdk_path doit être .android-sdk."
+
             echo "Valeur détectée : ${ANDROID_SDK_PATH_VALUE}"
+
             exit 1
           fi
 
@@ -1067,20 +1369,31 @@ jobs:
           ANDROID_SKIP_UPDATE_VALUE="$(get_property "android.skip_update")"
 
           case "${ANDROID_SKIP_UPDATE_VALUE,,}" in
+
             1|true|yes|on)
+
               echo
               echo "android.skip_update = ${ANDROID_SKIP_UPDATE_VALUE}"
+
               echo "Valeur activée : OK"
+
               ;;
 
+
             *)
+
               echo
               echo "ERREUR : android.skip_update doit être activé."
+
               echo "Valeur détectée : ${ANDROID_SKIP_UPDATE_VALUE}"
+
               echo
               echo "Valeurs acceptées : 1, true, yes ou on."
+
               exit 1
+
               ;;
+
           esac
 
 
@@ -1091,16 +1404,23 @@ jobs:
           ANDROID_ARCHS_VALUE="$(get_property "android.archs")"
 
           if [[ "${ANDROID_ARCHS_VALUE}" != *"arm64-v8a"* ]]; then
+
             echo
             echo "ERREUR : arm64-v8a est absent de android.archs."
+
             echo "Valeur détectée : ${ANDROID_ARCHS_VALUE}"
+
             exit 1
           fi
 
+
           if [[ "${ANDROID_ARCHS_VALUE}" != *"armeabi-v7a"* ]]; then
+
             echo
             echo "ERREUR : armeabi-v7a est absent de android.archs."
+
             echo "Valeur détectée : ${ANDROID_ARCHS_VALUE}"
+
             exit 1
           fi
 
@@ -1116,11 +1436,17 @@ jobs:
 
           echo
           echo "API Android       : ${ANDROID_API_VALUE}"
+
           echo "API minimale      : ${ANDROID_MIN_API_VALUE}"
+
           echo "Build Tools       : ${ANDROID_BUILD_TOOLS_VALUE}"
+
           echo "NDK               : ${ANDROID_NDK_VALUE}"
+
           echo "SDK               : ${ANDROID_SDK_PATH_VALUE}"
+
           echo "Skip update       : ${ANDROID_SKIP_UPDATE_VALUE}"
+
           echo "Architectures     : ${ANDROID_ARCHS_VALUE}"
 
           echo
@@ -1163,16 +1489,6 @@ jobs:
           # ======================================================
           # 14.1 - VÉRIFICATION DES FICHIERS PYTHON
           # ======================================================
-          #
-          # Ici, une référence ReportLab est réellement dangereuse :
-          #
-          #   from reportlab ...
-          #   import reportlab
-          #   generer_rapport_pdf(...)
-          #
-          # Les fichiers Python ne doivent donc contenir aucune
-          # référence ReportLab.
-          # ======================================================
 
           echo
           echo "Recherche dans les fichiers Python..."
@@ -1198,37 +1514,9 @@ jobs:
           # ======================================================
           # 14.2 - VÉRIFICATION DES DÉPENDANCES DE BUILDOZER.SPEC
           # ======================================================
-          #
-          # On supprime les commentaires avant d'effectuer la
-          # recherche.
-          #
-          # Ainsi :
-          #
-          #   # ReportLab est supprimé
-          #
-          # ne déclenche pas une fausse erreur.
-          #
-          # Mais :
-          #
-          #   requirements = python3,kivy,reportlab,pandas
-          #
-          # déclenchera bien une erreur.
-          # ======================================================
 
           echo
           echo "Vérification des paramètres actifs de buildozer.spec..."
-
-          # ------------------------------------------------------
-          # Création d'une copie temporaire nettoyée.
-          #
-          # On supprime :
-          #
-          # - les lignes vides ;
-          # - les commentaires commençant par # ;
-          # - les commentaires commençant par ;
-          #
-          # Le fichier original n'est jamais modifié.
-          # ------------------------------------------------------
 
           SPEC_CLEAN="${RUNNER_TEMP}/buildozer-spec-clean.txt"
 
@@ -1239,10 +1527,6 @@ jobs:
             > "${SPEC_CLEAN}"
 
 
-          # ------------------------------------------------------
-          # Affichage de la configuration active.
-          # ------------------------------------------------------
-
           echo
           echo "Configuration active de buildozer.spec :"
 
@@ -1250,19 +1534,35 @@ jobs:
 
 
           # ------------------------------------------------------
-          # Recherche d'une dépendance ReportLab active.
+          # Extraction de la ligne requirements.
+          #
+          # Nous faisons cette vérification en deux temps afin
+          # d'éviter une expression régulière ambiguë avec
+          # l'opérateur ^ placé à l'intérieur d'un motif complexe.
           # ------------------------------------------------------
 
           echo
           echo "Recherche de ReportLab dans les dépendances..."
 
-          if grep -niE \
-            '^[[:space:]]*requirements[[:space:]]*=.*(^|[,[:space:]])reportlab([<>=!~0-9]|[,[:space:]]|$)' \
-            "${SPEC_CLEAN}"; then
+          REQUIREMENTS_LINE="$(
+            grep -Ei \
+              '^[[:space:]]*requirements[[:space:]]*=' \
+              "${SPEC_CLEAN}" \
+              || true
+          )"
+
+
+          if printf '%s\n' "${REQUIREMENTS_LINE}" |
+             grep -qiE \
+               '(^|[,[:space:]])reportlab([<>=!~0-9]|[,[:space:]]|$)'; then
 
             echo
             echo "ERREUR : ReportLab est encore présent dans"
             echo "les dépendances actives de buildozer.spec."
+
+            echo
+            echo "Ligne détectée :"
+            echo "${REQUIREMENTS_LINE}"
 
             exit 1
           fi
@@ -1270,12 +1570,6 @@ jobs:
 
           # ------------------------------------------------------
           # Recherche d'une recette locale Python-for-Android.
-          #
-          # Une configuration active comme :
-          #
-          #   p4a.local_recipes = p4a-recipes
-          #
-          # doit également être absente.
           # ------------------------------------------------------
 
           echo
@@ -1301,10 +1595,6 @@ jobs:
             echo
             echo "Vérification de requirements.txt..."
 
-            # ----------------------------------------------------
-            # Les commentaires et lignes vides sont ignorés.
-            # ----------------------------------------------------
-
             REQUIREMENTS_CLEAN="${RUNNER_TEMP}/requirements-clean.txt"
 
             sed \
@@ -1313,10 +1603,6 @@ jobs:
               requirements.txt \
               > "${REQUIREMENTS_CLEAN}"
 
-
-            # ----------------------------------------------------
-            # ReportLab ne doit pas apparaître comme dépendance.
-            # ----------------------------------------------------
 
             if grep -niE \
               '^[[:space:]]*reportlab([<>=!~]|$)' \
@@ -1353,6 +1639,7 @@ jobs:
                 -iname "*reportlab*" \
                 -print
             )"
+
 
             if [ -n "${REPORTLAB_RECIPES}" ]; then
 
@@ -1425,6 +1712,7 @@ jobs:
           echo "Vérification du SDK :"
 
           if [ ! -d "${ANDROID_SDK_ROOT_PATH}" ]; then
+
             echo
             echo "ERREUR : .android-sdk a été supprimé ou"
             echo "n'existe plus."
@@ -1459,9 +1747,14 @@ jobs:
 
           SDK_ROOT="${ANDROID_SDK_ROOT_PATH}"
 
+          SDKMANAGER_MODERN="${SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager"
+
+          SDKMANAGER_LEGACY="${SDK_ROOT}/tools/bin/sdkmanager"
+
           echo "================================================"
           echo "SDK UTILISÉ PAR BUILDOZER"
           echo "================================================"
+
 
           echo
           echo "ANDROID_HOME :"
@@ -1486,6 +1779,7 @@ jobs:
           # ------------------------------------------------------
 
           if [ "${ANDROID_HOME}" != "${SDK_ROOT}" ]; then
+
             echo
             echo "ERREUR : ANDROID_HOME ne pointe pas vers"
             echo ".android-sdk."
@@ -1495,6 +1789,7 @@ jobs:
 
 
           if [ "${ANDROID_SDK_ROOT}" != "${SDK_ROOT}" ]; then
+
             echo
             echo "ERREUR : ANDROID_SDK_ROOT ne pointe pas vers"
             echo ".android-sdk."
@@ -1504,17 +1799,69 @@ jobs:
 
 
           # ------------------------------------------------------
+          # Vérification du sdkmanager moderne.
+          # ------------------------------------------------------
+
+          echo
+          echo "sdkmanager moderne :"
+
+          if [ ! -x "${SDKMANAGER_MODERN}" ]; then
+
+            echo
+            echo "ERREUR : sdkmanager moderne est introuvable :"
+
+            echo "${SDKMANAGER_MODERN}"
+
+            exit 1
+          fi
+
+          "${SDKMANAGER_MODERN}" \
+            --version
+
+
+          # ------------------------------------------------------
+          # Vérification du sdkmanager legacy.
+          #
+          # C'est le chemin utilisé dans l'erreur précédente.
+          # ------------------------------------------------------
+
+          echo
+          echo "sdkmanager legacy :"
+
+          if [ ! -x "${SDKMANAGER_LEGACY}" ]; then
+
+            echo
+            echo "ERREUR : sdkmanager legacy est introuvable :"
+
+            echo "${SDKMANAGER_LEGACY}"
+
+            echo
+            echo "Contenu de tools/ :"
+
+            ls -la "${SDK_ROOT}/tools" \
+              || true
+
+            exit 1
+          fi
+
+          "${SDKMANAGER_LEGACY}" \
+            --version
+
+
+          # ------------------------------------------------------
           # Vérification de aidl.
           #
-          # C'est précisément l'outil qui manquait dans le log
+          # C'est précisément l'outil qui manquait dans un log
           # précédent.
           # ------------------------------------------------------
 
           AIDL="${SDK_ROOT}/build-tools/${ANDROID_BUILD_TOOLS}/aidl"
 
           if [ ! -x "${AIDL}" ]; then
+
             echo
             echo "ERREUR : aidl est introuvable :"
+
             echo "${AIDL}"
 
             exit 1
@@ -1522,7 +1869,10 @@ jobs:
 
           echo
           echo "aidl :"
-          "${AIDL}" --version || true
+
+          "${AIDL}" \
+            --version \
+            || true
 
 
           # ------------------------------------------------------
@@ -1530,9 +1880,24 @@ jobs:
           # ------------------------------------------------------
 
           if [ ! -d "${SDK_ROOT}/platforms/android-${ANDROID_API}" ]; then
+
             echo
             echo "ERREUR : Android API ${ANDROID_API}"
             echo "introuvable."
+
+            exit 1
+          fi
+
+
+          # ------------------------------------------------------
+          # Vérification du Build Tools.
+          # ------------------------------------------------------
+
+          if [ ! -d "${SDK_ROOT}/build-tools/${ANDROID_BUILD_TOOLS}" ]; then
+
+            echo
+            echo "ERREUR : Build Tools ${ANDROID_BUILD_TOOLS}"
+            echo "introuvables."
 
             exit 1
           fi
@@ -1543,6 +1908,7 @@ jobs:
           # ------------------------------------------------------
 
           if [ ! -f "${SDK_ROOT}/ndk/${ANDROID_NDK_VERSION}/source.properties" ]; then
+
             echo
             echo "ERREUR : NDK ${ANDROID_NDK_VERSION}"
             echo "introuvable."
@@ -1593,6 +1959,7 @@ jobs:
 
           echo
           echo "Configuration buildozer.spec :"
+
           sed -n \
             '/^\[app\]/,/^\[buildozer\]/p' \
             buildozer.spec
@@ -1615,6 +1982,13 @@ jobs:
       #
       # empêche Buildozer de tenter une mise à jour automatique
       # du SDK.
+      #
+      # Le chemin legacy sdkmanager est également disponible :
+      #
+      #   .android-sdk/tools/bin/sdkmanager
+      #
+      # afin de satisfaire les composants de la chaîne de build
+      # qui utilisent encore cet ancien emplacement.
       # ==========================================================
 
       - name: "18 - Construire l'APK Android"
@@ -1647,6 +2021,14 @@ jobs:
           echo "${ANDROID_MIN_API}"
 
           echo
+          echo "sdkmanager moderne :"
+          echo "${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager"
+
+          echo
+          echo "sdkmanager legacy :"
+          echo "${ANDROID_SDK_ROOT}/tools/bin/sdkmanager"
+
+          echo
           echo "================================================"
           echo "BUILDOZER ANDROID DEBUG"
           echo "================================================"
@@ -1676,11 +2058,13 @@ jobs:
           echo "================================================"
 
           if [ ! -d bin ]; then
+
             echo
             echo "ERREUR : le répertoire bin/ n'existe pas."
 
             exit 1
           fi
+
 
           APK_COUNT="$(
             find bin \
@@ -1690,10 +2074,13 @@ jobs:
               | wc -l
           )"
 
+
           echo
           echo "Nombre d'APK trouvés : ${APK_COUNT}"
 
+
           if [ "${APK_COUNT}" -eq 0 ]; then
+
             echo
             echo "ERREUR : aucun APK n'a été généré."
 
@@ -1708,6 +2095,7 @@ jobs:
 
             exit 1
           fi
+
 
           echo
           echo "APK générés :"
@@ -1802,10 +2190,29 @@ jobs:
 
           echo "ANDROID_NDK_HOME=${ANDROID_NDK_HOME:-non défini}"
 
+
           echo
           echo "SDK Android :"
 
           if [ -d "${ANDROID_SDK_ROOT_PATH}" ]; then
+
+            echo
+            echo "sdkmanager moderne :"
+
+            ls -la \
+              "${ANDROID_SDK_ROOT_PATH}/cmdline-tools/latest/bin/sdkmanager" \
+              2>/dev/null \
+              || true
+
+
+            echo
+            echo "sdkmanager legacy :"
+
+            ls -la \
+              "${ANDROID_SDK_ROOT_PATH}/tools/bin/sdkmanager" \
+              2>/dev/null \
+              || true
+
 
             echo
             echo "Build Tools :"
@@ -1862,9 +2269,13 @@ jobs:
           echo "buildozer.spec :"
 
           if [ -f buildozer.spec ]; then
+
             cat buildozer.spec
+
           else
+
             echo "buildozer.spec introuvable."
+
           fi
 
 
@@ -1895,4 +2306,3 @@ jobs:
           echo "================================================"
           echo "FIN DES DIAGNOSTICS"
           echo "================================================"
-
