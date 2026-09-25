@@ -192,11 +192,92 @@ jobs:
 
           export PATH="$SDK/cmdline-tools/latest/bin:$SDK/platform-tools:$PATH"
 
-          sdkmanager \
-            "platform-tools" \
-            "platforms;android-${ANDROID_API}" \
-            "build-tools;${ANDROID_BUILD_TOOLS}" \
-            "ndk;${ANDROID_NDK}"
+          echo "=========================================="
+          echo "Installation Android SDK"
+          echo "=========================================="
+
+          echo
+          echo "Installation platform-tools..."
+          sdkmanager "platform-tools"
+
+          echo
+          echo "Installation Android API ${ANDROID_API}..."
+          sdkmanager "platforms;android-${ANDROID_API}"
+
+          echo
+          echo "Installation Build Tools ${ANDROID_BUILD_TOOLS}..."
+          sdkmanager "build-tools;${ANDROID_BUILD_TOOLS}"
+
+          echo
+          echo "=========================================="
+          echo "Recherche des versions NDK disponibles"
+          echo "=========================================="
+
+          sdkmanager --list > /tmp/sdkmanager-list.txt
+
+          echo
+          echo "Versions NDK 28 disponibles :"
+
+          grep -E '^[[:space:]]*ndk;28\.' \
+            /tmp/sdkmanager-list.txt \
+            | head -20 || true
+
+          echo
+          echo "=========================================="
+          echo "Recherche NDK r28c"
+          echo "=========================================="
+
+          # NDK r28c correspond à la troisième révision
+          # de la branche r28.
+          #
+          # On cherche d'abord une version 28.2.xxxxxxx,
+          # qui correspond à r28c.
+
+          NDK_PACKAGE=$(
+            grep -E '^[[:space:]]*ndk;28\.2\.[0-9]+' \
+              /tmp/sdkmanager-list.txt \
+            | sed -E 's/^[[:space:]]*(ndk;28\.2\.[0-9]+).*/\1/' \
+            | head -1
+          )
+
+          if [ -z "$NDK_PACKAGE" ]; then
+            echo "ERREUR : impossible de trouver un NDK 28.2.x."
+            echo
+            echo "NDK disponibles :"
+            grep -E '^[[:space:]]*ndk;' \
+              /tmp/sdkmanager-list.txt \
+              | head -50 || true
+            exit 1
+          fi
+
+          echo "NDK sélectionné : $NDK_PACKAGE"
+
+          echo
+          echo "=========================================="
+          echo "Installation $NDK_PACKAGE"
+          echo "=========================================="
+
+          sdkmanager "$NDK_PACKAGE"
+
+          echo
+          echo "=========================================="
+          echo "NDK installé"
+          echo "=========================================="
+
+          find "$SDK/ndk" \
+            -maxdepth 2 \
+            -type f \
+            -name source.properties \
+            -print
+
+          echo
+          echo "Répertoires NDK :"
+
+          find "$SDK/ndk" \
+            -mindepth 1 \
+            -maxdepth 1 \
+            -type d \
+            -print
 
       # ============================================================
       # 10. Vérification SDK
