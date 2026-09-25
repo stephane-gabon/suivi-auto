@@ -32,16 +32,13 @@ version = 1.0
 # DÉPENDANCES PYTHON
 # ==========================================================
 
-# ReportLab est volontairement absent.
 #
 # L'application conserve :
 # - Kivy
 # - Plyer
 # - OpenPyXL
-# - Pandas
-#
-# L'export PDF a été supprimé du projet.
-requirements = python3,kivy,plyer,openpyxl,pandas
+# 
+requirements = python3,kivy,plyer,openpyxl
 
 
 # ==========================================================
