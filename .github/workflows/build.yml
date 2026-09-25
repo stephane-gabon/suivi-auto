@@ -480,6 +480,18 @@ jobs:
       # ==================================================================
       # ÉTAPE 10 - CONFIGURER LE PATH ANDROID
       # ==================================================================
+      #
+      # Les Build Tools sont ajoutés explicitement au PATH.
+      #
+      # Cela permet aux étapes suivantes de trouver directement :
+      #
+      #   aapt
+      #   aapt2
+      #   zipalign
+      #   apksigner
+      #
+      # sans devoir reconstruire manuellement le PATH à chaque étape.
+      # ==================================================================
 
       - name: "Configurer le PATH Android"
         shell: bash
@@ -487,8 +499,22 @@ jobs:
           set -euo pipefail
 
           echo "${ANDROID_HOME}/platform-tools" >> "${GITHUB_PATH}"
+
           echo "${ANDROID_HOME}/cmdline-tools/latest/bin" >> "${GITHUB_PATH}"
+
           echo "${ANDROID_HOME}/tools/bin" >> "${GITHUB_PATH}"
+
+          echo "${ANDROID_HOME}/build-tools/${ANDROID_BUILD_TOOLS}" >> "${GITHUB_PATH}"
+
+          echo "PATH Android configuré."
+
+          echo
+          echo "Répertoires ajoutés :"
+
+          echo "  ${ANDROID_HOME}/platform-tools"
+          echo "  ${ANDROID_HOME}/cmdline-tools/latest/bin"
+          echo "  ${ANDROID_HOME}/tools/bin"
+          echo "  ${ANDROID_HOME}/build-tools/${ANDROID_BUILD_TOOLS}"
 
 
       # ==================================================================
@@ -1013,13 +1039,55 @@ jobs:
       # ==================================================================
       # ÉTAPE 19 - VALIDER L'ENVIRONNEMENT COMPLET
       # ==================================================================
+      #
+      # Cette étape vérifie tous les outils indispensables avant de
+      # lancer la compilation Android.
+      #
+      # IMPORTANT :
+      #
+      # aapt appartient au package Android Build Tools.
+      #
+      # Son emplacement est :
+      #
+      #   .android-sdk/build-tools/34.0.0/aapt
+      #
+      # Il faut donc ajouter explicitement le répertoire Build Tools
+      # au PATH.
+      #
+      # Sans cela :
+      #
+      #   command -v aapt
+      #
+      # échoue alors même que Build Tools est correctement installé.
+      # ==================================================================
 
       - name: "Valider l'environnement"
         shell: bash
         run: |
           set -euo pipefail
 
-          export PATH="${ANDROID_HOME}/platform-tools:${ANDROID_HOME}/cmdline-tools/latest/bin:${ANDROID_HOME}/tools/bin:${PATH}"
+          # --------------------------------------------------------------
+          # Construction du PATH Android complet.
+          #
+          # platform-tools :
+          #   adb
+          #
+          # cmdline-tools :
+          #   sdkmanager
+          #
+          # tools/bin :
+          #   wrapper sdkmanager compatible Buildozer
+          #
+          # build-tools :
+          #   aapt, aapt2, zipalign, apksigner, etc.
+          # --------------------------------------------------------------
+
+          export PATH="${ANDROID_HOME}/platform-tools:${ANDROID_HOME}/cmdline-tools/latest/bin:${ANDROID_HOME}/tools/bin:${ANDROID_HOME}/build-tools/${ANDROID_BUILD_TOOLS}:${PATH}"
+
+
+          # --------------------------------------------------------------
+          # JAVA
+          # --------------------------------------------------------------
 
           echo "============================================================"
           echo "JAVA"
@@ -1027,6 +1095,10 @@ jobs:
 
           java -version
 
+
+          # --------------------------------------------------------------
+          # PYTHON
+          # --------------------------------------------------------------
 
           echo
           echo "============================================================"
@@ -1037,6 +1109,10 @@ jobs:
           python -m pip --version
 
 
+          # --------------------------------------------------------------
+          # BUILDOZER
+          # --------------------------------------------------------------
+
           echo
           echo "============================================================"
           echo "BUILDOZER"
@@ -1044,6 +1120,10 @@ jobs:
 
           buildozer version
 
+
+          # --------------------------------------------------------------
+          # CYTHON
+          # --------------------------------------------------------------
 
           echo
           echo "============================================================"
@@ -1053,6 +1133,10 @@ jobs:
           cython --version
 
 
+          # --------------------------------------------------------------
+          # SDKMANAGER
+          # --------------------------------------------------------------
+
           echo
           echo "============================================================"
           echo "SDKMANAGER"
@@ -1060,6 +1144,10 @@ jobs:
 
           sdkmanager --version
 
+
+          # --------------------------------------------------------------
+          # ADB
+          # --------------------------------------------------------------
 
           echo
           echo "============================================================"
@@ -1069,35 +1157,150 @@ jobs:
           adb version
 
 
+          # --------------------------------------------------------------
+          # ANDROID BUILD TOOLS
+          # --------------------------------------------------------------
+          #
+          # Vérification explicite du répertoire.
+          # --------------------------------------------------------------
+
+          echo
+          echo "============================================================"
+          echo "ANDROID BUILD TOOLS"
+          echo "============================================================"
+
+          BUILD_TOOLS_DIR="${ANDROID_HOME}/build-tools/${ANDROID_BUILD_TOOLS}"
+
+          if [[ ! -d "${BUILD_TOOLS_DIR}" ]]; then
+            echo "ERREUR : Android Build Tools introuvables :"
+            echo "${BUILD_TOOLS_DIR}"
+            exit 1
+          fi
+
+          echo "Répertoire :"
+          echo "${BUILD_TOOLS_DIR}"
+
+          echo
+          echo "Contenu des outils principaux :"
+
+          ls -l \
+            "${BUILD_TOOLS_DIR}/aapt" \
+            "${BUILD_TOOLS_DIR}/aapt2" \
+            "${BUILD_TOOLS_DIR}/zipalign" \
+            "${BUILD_TOOLS_DIR}/apksigner"
+
+
+          # --------------------------------------------------------------
+          # AAPT
+          # --------------------------------------------------------------
+          #
+          # command -v doit maintenant trouver :
+          #
+          #   .android-sdk/build-tools/34.0.0/aapt
+          # --------------------------------------------------------------
+
           echo
           echo "============================================================"
           echo "AAPT"
           echo "============================================================"
 
-          command -v aapt
+          AAPT_PATH="$(command -v aapt)"
 
+          echo "aapt trouvé :"
+          echo "${AAPT_PATH}"
+
+          echo
+          echo "Version aapt :"
+
+          aapt version
+
+
+          # --------------------------------------------------------------
+          # AAPT2
+          # --------------------------------------------------------------
 
           echo
           echo "============================================================"
-          echo "NDK"
+          echo "AAPT2"
           echo "============================================================"
 
-          test -d \
-            "${ANDROID_HOME}/ndk/${ANDROID_NDK_PACKAGE}"
+          AAPT2_PATH="$(command -v aapt2)"
 
-          echo \
-            "${ANDROID_HOME}/ndk/${ANDROID_NDK_PACKAGE}"
+          echo "aapt2 trouvé :"
+          echo "${AAPT2_PATH}"
 
+
+          # --------------------------------------------------------------
+          # ZIPALIGN
+          # --------------------------------------------------------------
+
+          echo
+          echo "============================================================"
+          echo "ZIPALIGN"
+          echo "============================================================"
+
+          ZIPALIGN_PATH="$(command -v zipalign)"
+
+          echo "zipalign trouvé :"
+          echo "${ZIPALIGN_PATH}"
+
+
+          # --------------------------------------------------------------
+          # APKSIGNER
+          # --------------------------------------------------------------
+
+          echo
+          echo "============================================================"
+          echo "APKSIGNER"
+          echo "============================================================"
+
+          APKSIGNER_PATH="$(command -v apksigner)"
+
+          echo "apksigner trouvé :"
+          echo "${APKSIGNER_PATH}"
+
+
+          # --------------------------------------------------------------
+          # NDK
+          # --------------------------------------------------------------
+
+          echo
+          echo "============================================================"
+          echo "ANDROID NDK"
+          echo "============================================================"
+
+          NDK_DIR="${ANDROID_HOME}/ndk/${ANDROID_NDK_PACKAGE}"
+
+          if [[ ! -d "${NDK_DIR}" ]]; then
+            echo "ERREUR : NDK introuvable :"
+            echo "${NDK_DIR}"
+            exit 1
+          fi
+
+          echo "NDK trouvé :"
+          echo "${NDK_DIR}"
+
+
+          # --------------------------------------------------------------
+          # PYTHON-FOR-ANDROID
+          # --------------------------------------------------------------
 
           echo
           echo "============================================================"
           echo "PYTHON-FOR-ANDROID"
           echo "============================================================"
 
-          test -d .p4a
+          if [[ ! -d ".p4a" ]]; then
+            echo "ERREUR : .p4a introuvable."
+            exit 1
+          fi
 
           git -C .p4a rev-parse HEAD
 
+
+          # --------------------------------------------------------------
+          # VÉRIFICATION DU PATCH PIP
+          # --------------------------------------------------------------
 
           echo
           echo "============================================================"
@@ -1107,8 +1310,36 @@ jobs:
           grep -n \
             -E \
             "venv.*--clear|pip install -U pip==${P4A_PIP_VERSION}" \
-            .p4a/pythonforandroid/build.py
+            ".p4a/pythonforandroid/build.py"
 
+
+          # --------------------------------------------------------------
+          # RÉSUMÉ FINAL
+          # --------------------------------------------------------------
+
+          echo
+          echo "============================================================"
+          echo "ENVIRONNEMENT VALIDÉ"
+          echo "============================================================"
+
+          echo "Java              : OK"
+          echo "Python            : OK"
+          echo "Buildozer         : OK"
+          echo "Cython            : OK"
+          echo "SDK Manager       : OK"
+          echo "ADB               : OK"
+          echo "Build Tools       : ${ANDROID_BUILD_TOOLS}"
+          echo "AAPT              : OK"
+          echo "AAPT2             : OK"
+          echo "Zipalign           : OK"
+          echo "Apksigner          : OK"
+          echo "NDK               : ${ANDROID_NDK}"
+          echo "P4A local         : OK"
+          echo "P4A pip patch     : OK"
+
+          echo
+          echo "La compilation Android peut commencer."
+          
 
       # ==================================================================
       # ÉTAPE 20 - AFFICHER LA CONFIGURATION FINALE
