@@ -956,19 +956,38 @@ jobs:
 
 
       # ==========================================================
-      # ÉTAPE 16 - PRÉCHARGER L'ARCHIVE XZ / LIBLZMA
+      # ÉTAPE 16 - PRÉCHARGER L'ARCHIVE XZ 5.2.4
       # ==========================================================
       #
       # Certaines compilations de python-for-android peuvent avoir
       # besoin de l'archive xz 5.2.4.
       #
-      # Pour éviter un téléchargement réseau instable pendant la
-      # compilation, l'archive est placée directement dans le
-      # répertoire attendu par la chaîne de build.
+      # Cette archive est téléchargée AVANT le lancement de
+      # Buildozer afin d'éviter qu'une connexion réseau instable
+      # interrompe la compilation au milieu du processus.
+      #
+      # IMPORTANT
+      # ---------
+      #
+      # Nous n'utilisons plus SourceForge ici.
+      #
+      # L'ancienne URL SourceForge pouvait retourner une erreur HTTP
+      # et "wget" terminait alors avec le code retour 8.
+      #
+      # L'archive est maintenant récupérée depuis l'infrastructure
+      # officielle Tukaani.
+      #
+      # Le fichier est ensuite vérifié avec son empreinte MD5.
       #
       # MD5 attendu :
       #
       #   5ace3264bdd00c65eeec2891346f65e6
+      #
+      # Le fichier est placé exactement dans le répertoire attendu
+      # par python-for-android :
+      #
+      #   .buildozer/android/platform/
+      #   build-arm64-v8a_armeabi-v7a/packages/liblzma/
       #
       # ==========================================================
 
@@ -985,25 +1004,97 @@ jobs:
           XZ_DIR="${GITHUB_WORKSPACE}/.buildozer/android/platform/build-arm64-v8a_armeabi-v7a/packages/liblzma"
           XZ_FILE="${XZ_DIR}/xz-5.2.4.tar.gz"
 
+          # Création du répertoire utilisé par python-for-android.
           mkdir -p "${XZ_DIR}"
 
           echo ""
-          echo "Téléchargement de xz 5.2.4..."
-
-          wget -q \
-            "https://sourceforge.net/projects/tukaani/files/xz/v5.2.4/xz-5.2.4.tar.gz/download" \
-            -O "${XZ_FILE}"
+          echo "Répertoire cible :"
+          echo "${XZ_DIR}"
 
           echo ""
-          echo "Vérification MD5..."
+          echo "Fichier cible :"
+          echo "${XZ_FILE}"
+
+          echo ""
+          echo "============================================================"
+          echo "TÉLÉCHARGEMENT DE XZ 5.2.4"
+          echo "============================================================"
+
+          # URL officielle Tukaani.
+          XZ_URL="https://tukaani.org/xz/xz-5.2.4.tar.gz"
+
+          echo ""
+          echo "URL :"
+          echo "${XZ_URL}"
+
+          # Suppression d'une éventuelle archive incomplète.
+          rm -f "${XZ_FILE}"
+
+          # Téléchargement avec suivi des redirections.
+          #
+          # -f : échoue sur les erreurs HTTP
+          # -L : suit les redirections
+          # --retry : effectue plusieurs tentatives
+          # --retry-all-errors : réessaie également certaines erreurs
+          # --connect-timeout : limite le temps d'établissement
+          # --max-time : limite la durée totale d'une tentative
+          #
+          curl \
+            --fail \
+            --location \
+            --show-error \
+            --retry 5 \
+            --retry-delay 5 \
+            --retry-all-errors \
+            --connect-timeout 30 \
+            --max-time 300 \
+            "${XZ_URL}" \
+            --output "${XZ_FILE}"
+
+          echo ""
+          echo "Téléchargement terminé."
+
+          echo ""
+          echo "============================================================"
+          echo "VÉRIFICATION DE L'ARCHIVE"
+          echo "============================================================"
+
+          # Vérification que le fichier existe réellement.
+          if [ ! -f "${XZ_FILE}" ]; then
+            echo ""
+            echo "ERREUR : l'archive xz n'a pas été téléchargée."
+            exit 1
+          fi
+
+          # Vérification que le fichier n'est pas vide.
+          if [ ! -s "${XZ_FILE}" ]; then
+            echo ""
+            echo "ERREUR : l'archive xz téléchargée est vide."
+            exit 1
+          fi
+
+          echo ""
+          echo "Taille de l'archive :"
+          ls -lh "${XZ_FILE}"
+
+          echo ""
+          echo "Empreinte MD5 :"
+
+          md5sum "${XZ_FILE}"
+
+          echo ""
+          echo "Vérification MD5 attendue :"
 
           echo "5ace3264bdd00c65eeec2891346f65e6  ${XZ_FILE}" \
             | md5sum -c -
 
           echo ""
-          echo "Archive xz 5.2.4 prête."
+          echo "============================================================"
+          echo "XZ 5.2.4 : ARCHIVE VALIDÉE"
+          echo "============================================================"
 
-          ls -lh "${XZ_FILE}"
+          echo ""
+          echo "L'archive est prête pour python-for-android."
 
 
       # ==========================================================
