@@ -906,16 +906,14 @@ jobs:
       # 14 - VÉRIFICATION DE LA SUPPRESSION DE REPORTLAB
       # ==========================================================
       #
-      # ReportLab a été retiré volontairement du projet.
+      # ReportLab a été supprimé du projet.
       #
-      # Cette vérification évite qu'une ancienne référence dans :
+      # Cette vérification porte uniquement sur les fichiers qui
+      # peuvent réellement influencer le build Android.
       #
-      #   - un fichier Python
-      #   - export_utils.py
-      #   - un recipe local
-      #   - buildozer.spec
-      #
-      # fasse revenir ReportLab dans le build.
+      # Le workflow lui-même et le README sont volontairement
+      # exclus de cette recherche, car ils peuvent mentionner
+      # ReportLab pour documenter sa suppression.
       # ==========================================================
 
       - name: "14 - Vérifier suppression de ReportLab"
@@ -923,54 +921,120 @@ jobs:
         run: |
           set -euo pipefail
 
-
           echo "================================================"
-          echo "RECHERCHE DE REPORTLAB"
+          echo "VÉRIFICATION REPORTLAB"
           echo "================================================"
 
+
+          # ------------------------------------------------------
+          # Vérification des fichiers Python de l'application.
+          # ------------------------------------------------------
+
+          echo
+          echo "Recherche dans les fichiers Python..."
 
           if grep -RniE \
             "reportlab|generer_rapport_pdf" \
             . \
+            --include="*.py" \
             --exclude-dir=.git \
             --exclude-dir=.buildozer \
             --exclude-dir=.android-sdk; then
 
             echo
-            echo "ERREUR : une référence à ReportLab existe encore."
-            echo
-            echo "Supprime les références affichées ci-dessus."
+            echo "ERREUR : une référence ReportLab existe encore"
+            echo "dans le code Python."
 
             exit 1
 
           fi
 
 
+          # ------------------------------------------------------
+          # Vérification du buildozer.spec.
+          # ------------------------------------------------------
+
           echo
-          echo "Aucune référence ReportLab détectée."
-
-
-          echo
-          echo "================================================"
-          echo "VÉRIFICATION DE BUILDOZER.SPEC"
-          echo "================================================"
-
+          echo "Recherche dans buildozer.spec..."
 
           if grep -niE \
-            "reportlab|p4a\.local_recipes" \
+            "reportlab|generer_rapport_pdf|p4a\.local_recipes" \
             buildozer.spec; then
 
             echo
             echo "ERREUR : buildozer.spec contient encore"
-            echo "ReportLab ou p4a.local_recipes."
+            echo "une référence interdite."
 
             exit 1
 
           fi
 
 
+          # ------------------------------------------------------
+          # Vérification de requirements.txt.
+          # ------------------------------------------------------
+
+          if [ -f requirements.txt ]; then
+
+            echo
+            echo "Recherche dans requirements.txt..."
+
+            if grep -niE \
+              "^[[:space:]]*reportlab([<>=!~]|$)" \
+              requirements.txt; then
+
+              echo
+              echo "ERREUR : ReportLab est encore présent"
+              echo "dans requirements.txt."
+
+              exit 1
+
+            fi
+
+          fi
+
+
+          # ------------------------------------------------------
+          # Vérification des recettes Python-for-Android locales.
+          # ------------------------------------------------------
+
+          if [ -d p4a-recipes ]; then
+
+            echo
+            echo "Vérification du répertoire p4a-recipes..."
+
+            if find p4a-recipes \
+              -iname "*reportlab*" \
+              -print |
+              grep -q .; then
+
+              echo
+              echo "ERREUR : une recette ReportLab existe encore"
+              echo "dans p4a-recipes/."
+
+              find p4a-recipes \
+                -iname "*reportlab*" \
+                -print
+
+              exit 1
+
+            fi
+
+          fi
+
+
+          # ------------------------------------------------------
+          # Vérification terminée.
+          # ------------------------------------------------------
+
           echo
-          echo "buildozer.spec : OK."
+          echo "================================================"
+          echo "REPORTLAB : ABSENT DU BUILD"
+          echo "================================================"
+
+          echo
+          echo "Aucune référence ReportLab détectée dans les"
+          echo "fichiers utilisés pour la compilation Android."
 
 
       # ==========================================================
