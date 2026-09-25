@@ -146,15 +146,38 @@ jobs:
       # ========================================================
       #
       # Buildozer / python-for-android compilent plusieurs
-      # dépendances natives Android.
+      # bibliothèques natives Android.
       #
-      # Certains recipes utilisent directement les outils GNU
-      # Autotools : autoconf, automake, autopoint, gettext,
-      # libtool, etc.
+      # Certaines recipes utilisent GNU Autotools et nécessitent
+      # notamment :
+      #
+      #   - autoconf
+      #   - automake
+      #   - autopoint
+      #   - gettext
+      #   - libtool
+      #   - libtool-bin
+      #   - libltdl-dev
       #
       # IMPORTANT :
-      # - "libtool" fournit les fichiers/outils Autotools.
-      # - "libtool-bin" fournit notamment l'exécutable "libtool".
+      # "libtool-bin" fournit l'exécutable /usr/bin/libtool.
+      #
+      # Les vérifications ci-dessous évitent volontairement
+      # les constructions du type :
+      #
+      #   commande | head -n 1
+      #
+      # car certaines commandes peuvent continuer à écrire dans
+      # le pipe après que "head" a fermé celui-ci.
+      #
+      # Cela peut provoquer :
+      #
+      #   Broken pipe
+      #   SIGPIPE
+      #   exit code != 0
+      #
+      # et faire échouer GitHub Actions alors que l'outil est
+      # parfaitement installé.
       #
       - name: "4 - Installer les dépendances système"
         shell: bash
@@ -198,37 +221,42 @@ jobs:
 
           echo ""
           echo "autoconf :"
-          autoconf --version | head -n 1
+          command -v autoconf
+          autoconf --version
 
           echo ""
           echo "automake :"
-          automake --version | head -n 1
+          command -v automake
+          automake --version
 
           echo ""
           echo "autopoint :"
-          autopoint --version | head -n 1
+          command -v autopoint
+          autopoint --version
 
           echo ""
           echo "gettext :"
-          gettext --version | head -n 1
+          command -v gettext
+          gettext --version
 
           echo ""
           echo "libtool :"
           command -v libtool
-          libtool --version | head -n 1
+          libtool --version
 
           echo ""
           echo "libtoolize :"
           command -v libtoolize
-          libtoolize --version | head -n 1
+          libtoolize --version
 
           echo ""
           echo "pkg-config :"
+          command -v pkg-config
           pkg-config --version
 
           echo ""
           echo "================================================"
-          echo "AUTOTOOLS : VÉRIFICATION TERMINÉE"
+          echo "AUTOTOOLS : VÉRIFICATION TERMINÉE AVEC SUCCÈS"
           echo "================================================"
 
 
