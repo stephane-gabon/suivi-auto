@@ -1,626 +1,435 @@
-# ================================================================
-# WORKFLOW GITHUB ACTIONS
+# ==============================================================
+# WORKFLOW GITHUB ACTIONS - BUILD APK ANDROID
 # Projet : Suivi Auto
-# Fichier : .github/workflows/build.yml
-# ================================================================
 #
-# OBJECTIF
-# --------
-# Construire automatiquement l'APK Android de l'application Kivy
-# "Suivi Auto" avec Buildozer sur GitHub Actions.
+# Objectif :
+#   Construire automatiquement l'APK Android avec :
+#     - Python 3.10
+#     - Java 17
+#     - Buildozer 1.6.0
+#     - Cython 0.29.37
+#     - Android API 33
+#     - Android min API 24
+#     - Android Build Tools 34.0.0
+#     - Android NDK 28.2.13676358
 #
+# IMPORTANT :
+#   - ReportLab est volontairement exclu du projet Android.
+#   - Le SDK Android est installé dans le dépôt GitHub Actions :
+#       .android-sdk
+#   - Le SDK Android n'est PAS installé dans :
+#       ~/.buildozer/android/platform/android-sdk
+#   - Le sdkmanager utilisé est exclusivement :
+#       .android-sdk/cmdline-tools/latest/bin/sdkmanager
+#   - Aucun ancien chemin :
+#       .android-sdk/tools/bin/sdkmanager
+#     n'est créé.
 #
-# ENVIRONNEMENT ANDROID UTILISÉ
-# -----------------------------
-# Python          : 3.10
-# Java            : 17
-# Buildozer       : 1.6.0
-# Cython          : 0.29.37
-# Android API     : 33
-# Android min API : 24
-# Build Tools     : 34.0.0
-# Android NDK     : 28.2.13676358 (= 28c côté Buildozer)
-#
-#
-# ARCHITECTURES
-# -------------
-# arm64-v8a
-# armeabi-v7a
-#
-#
-# DÉPENDANCES PYTHON
-# ------------------
-# python3
-# kivy
-# plyer
-# openpyxl
-# pandas
-#
-# ReportLab est volontairement supprimé.
-#
-#
-# IMPORTANT
-# ---------
-# Le SDK Android est installé dans :
-#
-#   ${GITHUB_WORKSPACE}/.android-sdk
-#
-# Le buildozer.spec doit contenir dans [app] :
-#
-#   android.sdk_path = .android-sdk
-#   android.skip_update = 1
-#
-# Cela évite que Buildozer utilise son ancien SDK interne :
-#
-#   /home/runner/.buildozer/android/platform/android-sdk
-#
-# et évite également qu'il tente de sélectionner une version
-# différente des Build Tools, par exemple build-tools;37.0.0.
-#
-#
-# COMPATIBILITÉ SDKMANAGER
-# ------------------------
-# Les Android Command-Line Tools modernes installent sdkmanager
-# dans :
-#
-#   .android-sdk/cmdline-tools/latest/bin/sdkmanager
-#
-# Certaines versions de Buildozer / python-for-android recherchent
-# encore sdkmanager dans :
-#
-#   .android-sdk/tools/bin/sdkmanager
-#
-# Le workflow crée donc un lien symbolique de compatibilité :
-#
-#   tools/bin -> cmdline-tools/latest/bin
-#
-# Le SDK moderne reste ainsi utilisé, tout en étant compatible
-# avec les outils qui utilisent encore l'ancien chemin.
-# ================================================================
+#   Cette configuration évite les problèmes liés aux anciennes
+#   versions des Android SDK Tools.
+# ==============================================================
 
+name: Build Android APK
 
-# ================================================================
-# NOM DU WORKFLOW
-# ================================================================
-
-name: Build Android APK - Suivi Auto
-
-
-# ================================================================
+# ==============================================================
 # DÉCLENCHEMENT DU WORKFLOW
-# ================================================================
-#
-# Le workflow est lancé :
-#
-# - à chaque push sur la branche principale ;
-# - manuellement depuis l'onglet Actions de GitHub.
-#
-# Le déclenchement manuel est particulièrement pratique pour
-# relancer une compilation sans créer un nouveau commit.
-# ================================================================
+# ==============================================================
 
 on:
+
+  # Construction automatique lors d'un push sur main.
   push:
     branches:
       - main
 
+  # Permet de lancer manuellement le workflow depuis GitHub.
   workflow_dispatch:
 
 
-# ================================================================
+# ==============================================================
 # VARIABLES GLOBALES
-# ================================================================
+# ==============================================================
 
 env:
 
-  # --------------------------------------------------------------
-  # Versions Python / Java
-  # --------------------------------------------------------------
-
+  # Version de Python utilisée pour Buildozer / python-for-android.
   PYTHON_VERSION: "3.10"
 
+  # Version de Java utilisée pour Android / Gradle.
   JAVA_VERSION: "17"
 
-
-  # --------------------------------------------------------------
-  # Versions Buildozer / Cython
-  # --------------------------------------------------------------
-
+  # Version de Buildozer utilisée pour générer l'APK.
   BUILDOZER_VERSION: "1.6.0"
 
+  # Version de Cython compatible avec le projet.
   CYTHON_VERSION: "0.29.37"
 
-
-  # --------------------------------------------------------------
-  # Configuration Android
-  # --------------------------------------------------------------
-
+  # Version de l'API Android utilisée pour la compilation.
   ANDROID_API: "33"
 
+  # Version minimale d'Android supportée par l'application.
   ANDROID_MIN_API: "24"
 
+  # Version des Android Build Tools.
   ANDROID_BUILD_TOOLS: "34.0.0"
 
-  # Version complète réellement utilisée par sdkmanager.
+  # Version exacte du package NDK disponible dans sdkmanager.
   #
-  # ATTENTION :
-  # sdkmanager n'accepte pas "28c".
-  #
-  # Il faut utiliser :
+  # IMPORTANT :
+  # "28c" est utilisé dans buildozer.spec,
+  # mais le package réellement installé par sdkmanager est :
   #
   #   ndk;28.2.13676358
   #
-  # Buildozer utilise ensuite :
-  #
-  #   android.ndk = 28c
-  #
   ANDROID_NDK_VERSION: "28.2.13676358"
 
+  # Version du package Android Command Line Tools.
+  ANDROID_CMDLINE_TOOLS_VERSION: "11076708"
 
-  # --------------------------------------------------------------
-  # Répertoire du SDK Android
-  # --------------------------------------------------------------
+  # Emplacement du SDK Android dans le workspace GitHub.
   #
-  # Le SDK est installé dans le dépôt GitHub Actions.
+  # Ce chemin doit correspondre à :
   #
-  # Cela permet d'avoir exactement le même SDK pour :
+  #   android.sdk_path = .android-sdk
   #
-  # 1. sdkmanager
-  # 2. Buildozer
-  # 3. python-for-android
-  #
+  # dans buildozer.spec.
   ANDROID_SDK_ROOT_PATH: "${{ github.workspace }}/.android-sdk"
 
 
-  # --------------------------------------------------------------
-  # Version des Command Line Tools Android
-  # --------------------------------------------------------------
-  #
-  # Cette version fournit sdkmanager.
-  #
-  ANDROID_CMDLINE_TOOLS_VERSION: "11076708"
-
-
-# ================================================================
+# ==============================================================
 # JOB PRINCIPAL
-# ================================================================
+# ==============================================================
 
 jobs:
 
-  build-android:
+  build:
 
-    # --------------------------------------------------------------
-    # Machine virtuelle utilisée par GitHub Actions.
-    # --------------------------------------------------------------
-
-    runs-on: ubuntu-latest
-
-
-    # --------------------------------------------------------------
-    # PERMISSIONS
-    # --------------------------------------------------------------
-    #
-    # Le workflow n'a pas besoin de permissions particulières
-    # sur le dépôt.
-    #
-    # Le contenu du dépôt peut être lu et l'artefact peut être
-    # envoyé via l'action upload-artifact.
-    # --------------------------------------------------------------
-
-    permissions:
-      contents: read
-
-
-    # ============================================================
-    # ÉTAPES
-    # ============================================================
+    # Machine virtuelle GitHub utilisée pour compiler l'application.
+    runs-on: ubuntu-22.04
 
     steps:
 
+      # ========================================================
+      # 1 - RÉCUPÉRATION DU CODE SOURCE
+      # ========================================================
 
-      # ==========================================================
-      # 1 - RÉCUPÉRATION DU PROJET
-      # ==========================================================
-
-      - name: "1 - Récupérer le dépôt"
+      - name: "1 - Récupérer le code source"
         uses: actions/checkout@v4
 
-        # --------------------------------------------------------
         # Cette étape récupère :
-        #
-        # - main.py
-        # - buildozer.spec
-        # - requirements.txt
-        # - screens/
-        # - utils/
-        # - etc.
-        #
-        # dans le runner GitHub Actions.
-        # --------------------------------------------------------
+        #   - main.py
+        #   - screens/
+        #   - utils/
+        #   - buildozer.spec
+        #   - requirements.txt
+        #   - etc.
 
 
-      # ==========================================================
+      # ========================================================
       # 2 - INSTALLATION DE PYTHON
-      # ==========================================================
+      # ========================================================
 
-      - name: "2 - Installer Python 3.10"
+      - name: "2 - Installer Python"
         uses: actions/setup-python@v5
 
         with:
+
+          # Python utilisé pour Buildozer et python-for-android.
           python-version: ${{ env.PYTHON_VERSION }}
 
-        # --------------------------------------------------------
-        # On utilise Python 3.10 afin de conserver un environnement
-        # stable pour Buildozer / python-for-android / Kivy.
-        #
-        # Aucun cache pip n'est utilisé ici volontairement.
-        #
-        # Cela évite notamment les problèmes liés à un fichier
-        # requirements.txt interprété avant que le dépôt soit
-        # correctement préparé.
-        # --------------------------------------------------------
+          # Pas de cache pip ici.
+          #
+          # Le cache automatique peut conserver des paquets
+          # provenant d'une ancienne configuration et compliquer
+          # le diagnostic des dépendances Android.
 
 
-      # ==========================================================
-      # 3 - INSTALLATION DE JAVA 17
-      # ==========================================================
+      # ========================================================
+      # 3 - INSTALLATION DE JAVA
+      # ========================================================
 
-      - name: "3 - Installer Java 17"
+      - name: "3 - Installer Java"
         uses: actions/setup-java@v5
 
         with:
+
+          # Distribution OpenJDK utilisée par Android/Gradle.
           distribution: temurin
+
+          # Java 17.
           java-version: ${{ env.JAVA_VERSION }}
 
-        # --------------------------------------------------------
-        # Java 17 est utilisé par l'environnement Android/Gradle.
-        #
-        # On ne demande PAS :
-        #
-        #   cache: gradle
-        #
-        # car le projet ne contient pas encore de fichier Gradle
-        # nécessitant ce mécanisme de cache.
-        # --------------------------------------------------------
 
+      # ========================================================
+      # 4 - DÉPENDANCES SYSTÈME
+      # ========================================================
 
-      # ==========================================================
-      # 4 - VÉRIFICATION DE PYTHON ET JAVA
-      # ==========================================================
-
-      - name: "4 - Vérifier Python et Java"
+      - name: "4 - Installer les dépendances système"
         shell: bash
         run: |
+
+          # Arrêt immédiat en cas d'erreur.
           set -euo pipefail
 
-          echo "================================================"
-          echo "VERSIONS DE L'ENVIRONNEMENT"
-          echo "================================================"
-
-          echo
-          echo "Python :"
-          python --version
-
-          echo
-          echo "Pip :"
-          python -m pip --version
-
-          echo
-          echo "Java :"
-          java -version
-
-          echo
-          echo "JAVA_HOME :"
-          echo "${JAVA_HOME}"
-
-          echo
-          echo "================================================"
-          echo "ENVIRONNEMENT PYTHON/JAVA : OK"
-          echo "================================================"
-
-
-      # ==========================================================
-      # 5 - INSTALLATION DES DÉPENDANCES SYSTÈME
-      # ==========================================================
-
-      - name: "5 - Installer les dépendances système Linux"
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          echo "================================================"
-          echo "INSTALLATION DES OUTILS LINUX"
-          echo "================================================"
-
+          # Mise à jour de la liste des paquets.
           sudo apt-get update
 
+          # Installation des outils nécessaires à Buildozer,
+          # python-for-android et à la compilation native.
           sudo apt-get install -y \
             git \
+            zip \
+            unzip \
             wget \
             curl \
-            unzip \
-            zip \
-            rsync \
-            file \
-            build-essential \
             autoconf \
             automake \
             libtool \
             pkg-config \
+            zlib1g-dev \
+            libncurses5-dev \
+            libncursesw5-dev \
             cmake \
             libffi-dev \
             libssl-dev \
-            zlib1g-dev \
-            libncurses-dev
-
-          echo
-          echo "================================================"
-          echo "DÉPENDANCES LINUX : OK"
-          echo "================================================"
+            build-essential \
+            ccache
 
 
-      # ==========================================================
-      # 6 - MISE À JOUR DE PIP
-      # ==========================================================
+      # ========================================================
+      # 5 - METTRE PIP À JOUR
+      # ========================================================
 
-      - name: "6 - Mettre à jour pip et les outils Python"
+      - name: "5 - Mettre pip à jour"
         shell: bash
         run: |
+
           set -euo pipefail
 
+          # Mise à jour de pip.
           python -m pip install --upgrade pip setuptools wheel
 
 
-      # ==========================================================
-      # 7 - INSTALLATION DE BUILDOZER ET CYTHON
-      # ==========================================================
+      # ========================================================
+      # 6 - INSTALLER CYTHON ET BUILDOZER
+      # ========================================================
 
-      - name: "7 - Installer Buildozer et Cython"
+      - name: "6 - Installer Buildozer et Cython"
         shell: bash
         run: |
+
           set -euo pipefail
 
+          # Installation des versions explicitement choisies.
+          python -m pip install \
+            "Cython==${CYTHON_VERSION}" \
+            "buildozer==${BUILDOZER_VERSION}"
+
+          # Affichage des versions réellement installées.
+          echo
           echo "================================================"
-          echo "INSTALLATION BUILDOZER"
+          echo "VERSIONS INSTALLÉES"
           echo "================================================"
 
-          python -m pip install \
-            "buildozer==${BUILDOZER_VERSION}" \
-            "Cython==${CYTHON_VERSION}"
+          python --version
 
           echo
-          echo "Buildozer :"
           buildozer --version
 
           echo
-          echo "Cython :"
           cython --version
 
-          echo
-          echo "================================================"
-          echo "BUILDOZER / CYTHON : OK"
-          echo "================================================"
 
+      # ========================================================
+      # 7 - PRÉPARER LE DOSSIER DU SDK ANDROID
+      # ========================================================
 
-      # ==========================================================
-      # 8 - PRÉPARATION DU SDK ANDROID
-      # ==========================================================
-      #
-      # Le SDK Android est volontairement placé dans le projet :
-      #
-      #   .android-sdk
-      #
-      # et NON dans :
-      #
-      #   ~/.buildozer/android/platform/android-sdk
-      #
-      # Cette distinction est essentielle.
-      # ==========================================================
-
-      - name: "8 - Préparer le SDK Android"
+      - name: "7 - Préparer le SDK Android"
         shell: bash
         run: |
+
           set -euo pipefail
 
+          # Dossier racine du SDK Android.
           SDK_ROOT="${ANDROID_SDK_ROOT_PATH}"
 
-          echo "================================================"
-          echo "PRÉPARATION DU SDK ANDROID"
-          echo "================================================"
-
-          echo
-          echo "SDK_ROOT :"
+          echo "SDK Android :"
           echo "${SDK_ROOT}"
 
-          # ------------------------------------------------------
-          # Création du répertoire du SDK.
-          # ------------------------------------------------------
+          # Création du dossier principal.
+          mkdir -p "${SDK_ROOT}"
 
+          # Création du dossier destiné aux Command Line Tools.
           mkdir -p "${SDK_ROOT}/cmdline-tools"
 
-          # ------------------------------------------------------
-          # Téléchargement des Android Command Line Tools.
-          # ------------------------------------------------------
-
-          CMDLINE_ZIP="${RUNNER_TEMP}/commandlinetools.zip"
-
-          CMDLINE_URL="https://dl.google.com/android/repository/commandlinetools-linux-${ANDROID_CMDLINE_TOOLS_VERSION}_latest.zip"
-
-          echo
-          echo "Téléchargement :"
-          echo "${CMDLINE_URL}"
-
-          curl \
-            --fail \
-            --location \
-            --retry 5 \
-            --retry-delay 3 \
-            --output "${CMDLINE_ZIP}" \
-            "${CMDLINE_URL}"
-
-          # ------------------------------------------------------
-          # Installation des Command Line Tools.
-          # ------------------------------------------------------
-
+          # Nettoyage uniquement de l'installation précédente
+          # des Command Line Tools.
+          #
+          # Le SDK complet n'est pas supprimé ici.
           rm -rf "${SDK_ROOT}/cmdline-tools/latest"
 
           mkdir -p "${SDK_ROOT}/cmdline-tools/latest"
 
-          rm -rf "${RUNNER_TEMP}/android-cmdline-tools"
 
-          mkdir -p "${RUNNER_TEMP}/android-cmdline-tools"
+      # ========================================================
+      # 8 - INSTALLER ANDROID COMMAND LINE TOOLS
+      # ========================================================
 
-          unzip \
-            -q \
-            "${CMDLINE_ZIP}" \
-            -d "${RUNNER_TEMP}/android-cmdline-tools"
-
-          # ------------------------------------------------------
-          # Le ZIP officiel contient généralement un dossier :
-          #
-          #   cmdline-tools/
-          #
-          # que nous plaçons dans :
-          #
-          #   .android-sdk/cmdline-tools/latest/
-          # ------------------------------------------------------
-
-          cp -R \
-            "${RUNNER_TEMP}/android-cmdline-tools/cmdline-tools/." \
-            "${SDK_ROOT}/cmdline-tools/latest/"
-
-          # ------------------------------------------------------
-          # Vérification de sdkmanager.
-          # ------------------------------------------------------
-
-          if [ ! -x "${SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager" ]; then
-            echo
-            echo "ERREUR : sdkmanager est introuvable."
-
-            find "${SDK_ROOT}" \
-              -maxdepth 6 \
-              -type f \
-              -name sdkmanager \
-              -print \
-              || true
-
-            exit 1
-          fi
-
-          echo
-          echo "sdkmanager :"
-          "${SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager" \
-            --version
-
-          echo
-          echo "================================================"
-          echo "COMMAND LINE TOOLS : OK"
-          echo "================================================"
-
-
-      # ==========================================================
-      # 9 - CONFIGURATION DES VARIABLES ANDROID
-      # ==========================================================
-
-      - name: "9 - Configurer les variables Android"
+      - name: "8 - Installer Android Command Line Tools"
         shell: bash
         run: |
+
           set -euo pipefail
 
           SDK_ROOT="${ANDROID_SDK_ROOT_PATH}"
 
-          NDK_ROOT="${SDK_ROOT}/ndk/${ANDROID_NDK_VERSION}"
+          # URL officielle du package Android Command Line Tools.
+          CMDLINE_TOOLS_URL="https://dl.google.com/android/repository/commandlinetools-linux-${ANDROID_CMDLINE_TOOLS_VERSION}_latest.zip"
 
-          # ------------------------------------------------------
-          # Variables Android persistantes pour les étapes
-          # suivantes du workflow.
-          # ------------------------------------------------------
+          # Fichiers temporaires.
+          TEMP_DIR="${RUNNER_TEMP}/android-cmdline-tools"
+          ZIP_FILE="${TEMP_DIR}/commandlinetools.zip"
 
-          echo "ANDROID_HOME=${SDK_ROOT}" >> "$GITHUB_ENV"
-
-          echo "ANDROID_SDK_ROOT=${SDK_ROOT}" >> "$GITHUB_ENV"
-
-          echo "ANDROID_NDK_HOME=${NDK_ROOT}" >> "$GITHUB_ENV"
-
-          # ------------------------------------------------------
-          # PATH.
-          # ------------------------------------------------------
-
-          echo "${SDK_ROOT}/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
-
-          echo "${SDK_ROOT}/tools/bin" >> "$GITHUB_PATH"
-
-          echo "${SDK_ROOT}/platform-tools" >> "$GITHUB_PATH"
-
-          echo "${SDK_ROOT}/build-tools/${ANDROID_BUILD_TOOLS}" >> "$GITHUB_PATH"
+          # Nettoyage préalable.
+          rm -rf "${TEMP_DIR}"
+          mkdir -p "${TEMP_DIR}"
 
           echo
-          echo "================================================"
-          echo "VARIABLES ANDROID"
-          echo "================================================"
+          echo "Téléchargement :"
+          echo "${CMDLINE_TOOLS_URL}"
+
+          # Téléchargement.
+          curl \
+            --fail \
+            --location \
+            --retry 5 \
+            --retry-delay 5 \
+            --output "${ZIP_FILE}" \
+            "${CMDLINE_TOOLS_URL}"
+
+          # Vérification que le fichier existe.
+          test -s "${ZIP_FILE}"
 
           echo
-          echo "ANDROID_HOME=${SDK_ROOT}"
+          echo "Extraction des Android Command Line Tools..."
+
+          # Extraction temporaire.
+          unzip -q "${ZIP_FILE}" -d "${TEMP_DIR}/extracted"
+
+          # Le ZIP officiel contient normalement un dossier :
+          #
+          #   cmdline-tools/
+          #
+          # contenant bin/, lib/, etc.
+          #
+          # Nous plaçons directement son contenu dans :
+          #
+          #   .android-sdk/cmdline-tools/latest/
+          cp -a \
+            "${TEMP_DIR}/extracted/cmdline-tools/." \
+            "${SDK_ROOT}/cmdline-tools/latest/"
+
+          # Vérification du sdkmanager moderne.
+          SDKMANAGER="${SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager"
+
+          if [ ! -x "${SDKMANAGER}" ]; then
+
+            echo
+            echo "ERREUR : sdkmanager introuvable :"
+            echo "${SDKMANAGER}"
+
+            echo
+            echo "Contenu du SDK :"
+            find "${SDK_ROOT}" -maxdepth 5 -type f -print || true
+
+            exit 1
+
+          fi
 
           echo
-          echo "ANDROID_SDK_ROOT=${SDK_ROOT}"
+          echo "sdkmanager installé :"
+          echo "${SDKMANAGER}"
+
+
+      # ========================================================
+      # 9 - CONFIGURER LES VARIABLES ANDROID
+      # ========================================================
+
+      - name: "9 - Configurer les variables Android"
+        shell: bash
+        run: |
+
+          set -euo pipefail
+
+          SDK_ROOT="${ANDROID_SDK_ROOT_PATH}"
+
+          # Android utilise historiquement ANDROID_HOME.
+          echo "ANDROID_HOME=${SDK_ROOT}" >> "${GITHUB_ENV}"
+
+          # Variable moderne recommandée.
+          echo "ANDROID_SDK_ROOT=${SDK_ROOT}" >> "${GITHUB_ENV}"
+
+          # Variable utilisée pour le NDK.
+          echo "ANDROID_NDK_HOME=${SDK_ROOT}/ndk/${ANDROID_NDK_VERSION}" >> "${GITHUB_ENV}"
+
+          # PATH contenant les outils Android modernes.
+          echo "PATH=${SDK_ROOT}/cmdline-tools/latest/bin:${SDK_ROOT}/platform-tools:${SDK_ROOT}/build-tools/${ANDROID_BUILD_TOOLS}:${PATH}" >> "${GITHUB_ENV}"
 
           echo
-          echo "ANDROID_NDK_HOME=${NDK_ROOT}"
+          echo "Variables Android configurées."
+
+          echo
+          echo "ANDROID_HOME :"
+          echo "${SDK_ROOT}"
+
+          echo
+          echo "ANDROID_SDK_ROOT :"
+          echo "${SDK_ROOT}"
+
+          echo
+          echo "sdkmanager :"
+          echo "${SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager"
 
 
-      # ==========================================================
-      # 10 - ACCEPTATION DES LICENCES ANDROID
-      # ==========================================================
-      #
-      # IMPORTANT :
-      #
-      # Nous n'utilisons PAS :
-      #
-      #   yes | sdkmanager --licenses
-      #
-      # car cette méthode peut provoquer :
-      #
-      #   yes: standard output: Broken pipe
-      #
-      # et faire échouer GitHub Actions avec le code 1.
-      #
-      # À la place, nous créons un fichier contenant un nombre
-      # fini de réponses "y".
-      # ==========================================================
+      # ========================================================
+      # 10 - ACCEPTER LES LICENCES ANDROID
+      # ========================================================
 
       - name: "10 - Accepter les licences Android"
         shell: bash
         run: |
+
           set -euo pipefail
 
           SDK_ROOT="${ANDROID_SDK_ROOT_PATH}"
 
           SDKMANAGER="${SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager"
 
-          LICENSE_INPUT="${RUNNER_TEMP}/android-license-input.txt"
-
-          echo "================================================"
-          echo "ACCEPTATION DES LICENCES ANDROID"
-          echo "================================================"
-
-          # ------------------------------------------------------
-          # Création d'un nombre suffisant de réponses "y".
+          # ----------------------------------------------------
+          # IMPORTANT :
           #
-          # Le fichier est fini : aucune commande yes infinie
-          # n'est utilisée.
-          # ------------------------------------------------------
+          # Nous n'utilisons PAS :
+          #
+          #   yes | sdkmanager --licenses
+          #
+          # car "yes" peut continuer à écrire alors que
+          # sdkmanager a terminé sa lecture, provoquant :
+          #
+          #   Broken pipe
+          #   SIGPIPE
+          #
+          # Nous envoyons donc un nombre fini de réponses "y".
+          # ----------------------------------------------------
 
+          LICENSE_INPUT="${RUNNER_TEMP}/android-license-input"
+
+          # Génération de 100 réponses positives.
           for i in $(seq 1 100); do
             printf 'y\n'
           done > "${LICENSE_INPUT}"
 
-          # ------------------------------------------------------
-          # Exécution de sdkmanager --licenses.
-          #
-          # set +e est temporairement utilisé afin de pouvoir
-          # analyser proprement le résultat de sdkmanager.
-          # ------------------------------------------------------
+          echo
+          echo "Acceptation des licences Android..."
 
           set +e
 
@@ -636,465 +445,237 @@ jobs:
 
           echo "${LICENSE_OUTPUT}"
 
-          # ------------------------------------------------------
-          # Certaines versions de sdkmanager peuvent retourner
-          # un code non nul malgré des licences correctement
-          # enregistrées.
+          # Le code de sortie peut dépendre de la version
+          # des Command Line Tools.
           #
-          # Nous vérifions donc également la présence des fichiers
-          # de licences.
-          # ------------------------------------------------------
+          # Nous vérifions surtout que le dossier licenses
+          # existe et contient effectivement des fichiers.
+          if [ ! -d "${SDK_ROOT}/licenses" ]; then
 
-          LICENSE_DIR="${SDK_ROOT}/licenses"
-
-          if [ ! -d "${LICENSE_DIR}" ]; then
             echo
-            echo "ERREUR : le répertoire des licences Android"
-            echo "n'a pas été créé :"
-            echo "${LICENSE_DIR}"
+            echo "ERREUR : le dossier des licences Android"
+            echo "n'a pas été créé."
 
             exit 1
+
           fi
 
           LICENSE_COUNT="$(
-            find "${LICENSE_DIR}" \
+            find "${SDK_ROOT}/licenses" \
               -type f \
               | wc -l
           )"
 
           echo
-          echo "Nombre de fichiers de licences : ${LICENSE_COUNT}"
+          echo "Nombre de fichiers de licence : ${LICENSE_COUNT}"
 
           if [ "${LICENSE_COUNT}" -eq 0 ]; then
+
             echo
-            echo "ERREUR : aucune licence Android n'a été"
-            echo "enregistrée."
+            echo "ERREUR : aucune licence Android détectée."
 
             exit 1
+
           fi
 
           echo
-          echo "Code retour sdkmanager --licenses :"
-          echo "${SDKMANAGER_EXIT_CODE}"
-
-          echo
-          echo "================================================"
-          echo "LICENCES ANDROID : OK"
-          echo "================================================"
+          echo "Licences Android : OK"
 
 
-      # ==========================================================
-      # 11 - INSTALLATION DES COMPOSANTS ANDROID
-      # ==========================================================
+      # ========================================================
+      # 11 - INSTALLER LES COMPOSANTS ANDROID
+      # ========================================================
 
-      - name: "11 - Installer API 33, Build Tools 34.0.0 et NDK 28c"
+      - name: "11 - Installer les composants Android"
         shell: bash
         run: |
+
           set -euo pipefail
 
           SDK_ROOT="${ANDROID_SDK_ROOT_PATH}"
 
           SDKMANAGER="${SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager"
 
+          echo
           echo "================================================"
           echo "INSTALLATION DES COMPOSANTS ANDROID"
           echo "================================================"
 
-          # ------------------------------------------------------
-          # Composants explicitement utilisés par le projet.
-          #
-          # Aucun build-tools 37.0.0 n'est demandé.
-          # ------------------------------------------------------
+          echo
+          echo "Installation de :"
+          echo "  platform-tools"
+          echo "  platforms;android-${ANDROID_API}"
+          echo "  build-tools;${ANDROID_BUILD_TOOLS}"
+          echo "  ndk;${ANDROID_NDK_VERSION}"
 
+          # Installation des composants exacts nécessaires
+          # au projet.
           "${SDKMANAGER}" \
+            --sdk_root="${SDK_ROOT}" \
             "platform-tools" \
             "platforms;android-${ANDROID_API}" \
             "build-tools;${ANDROID_BUILD_TOOLS}" \
             "ndk;${ANDROID_NDK_VERSION}"
 
           echo
-          echo "================================================"
-          echo "COMPOSANTS ANDROID INSTALLÉS"
-          echo "================================================"
-
-          echo
-          echo "SDK :"
-          ls -la "${SDK_ROOT}"
-
-          echo
-          echo "Build Tools :"
-          ls -la "${SDK_ROOT}/build-tools"
-
-          echo
-          echo "Platforms :"
-          ls -la "${SDK_ROOT}/platforms"
-
-          echo
-          echo "NDK :"
-          ls -la "${SDK_ROOT}/ndk"
+          echo "Installation Android terminée."
 
 
-      # ==========================================================
-      # 11 BIS - COMPATIBILITÉ SDKMANAGER POUR BUILDOZER / P4A
-      # ==========================================================
-      #
-      # PROBLÈME RÉSOLU PAR CETTE ÉTAPE
-      # --------------------------------
-      #
-      # Les Android Command-Line Tools modernes installent
-      # sdkmanager dans :
-      #
-      #   .android-sdk/cmdline-tools/latest/bin/sdkmanager
-      #
-      # Cependant, certaines versions de la chaîne
-      # Buildozer / python-for-android recherchent encore :
-      #
-      #   .android-sdk/tools/bin/sdkmanager
-      #
-      # Le log précédent indiquait précisément :
-      #
-      #   sdkmanager path
-      #   "/home/runner/work/suivi-auto/suivi-auto/.android-sdk/tools/bin/sdkmanager"
-      #   does not exist
-      #
-      # Nous créons donc ici un lien symbolique :
-      #
-      #   .android-sdk/tools/bin
-      #       ->
-      #   .android-sdk/cmdline-tools/latest/bin
-      #
-      # IMPORTANT :
-      #
-      # Nous ne réinstallons pas un ancien sdkmanager.
-      #
-      # Le sdkmanager moderne reste l'exécutable réel.
-      # Le chemin "tools/bin" sert uniquement de compatibilité.
-      # ==========================================================
+      # ========================================================
+      # 12 - VÉRIFIER L'INSTALLATION DU SDK
+      # ========================================================
 
-      - name: "11 BIS - Créer la compatibilité sdkmanager"
+      - name: "12 - Vérifier le SDK Android"
         shell: bash
         run: |
+
           set -euo pipefail
 
           SDK_ROOT="${ANDROID_SDK_ROOT_PATH}"
 
-          SDKMANAGER_MODERN="${SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager"
-
-          SDKMANAGER_LEGACY="${SDK_ROOT}/tools/bin/sdkmanager"
-
-          echo "================================================"
-          echo "COMPATIBILITÉ SDKMANAGER"
-          echo "================================================"
+          SDKMANAGER="${SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager"
 
           echo
-          echo "SDK_ROOT :"
-          echo "${SDK_ROOT}"
-
-          echo
-          echo "sdkmanager moderne :"
-          echo "${SDKMANAGER_MODERN}"
-
-          echo
-          echo "sdkmanager legacy :"
-          echo "${SDKMANAGER_LEGACY}"
-
-
-          # ------------------------------------------------------
-          # Vérification du sdkmanager moderne.
-          # ------------------------------------------------------
-
-          if [ ! -f "${SDKMANAGER_MODERN}" ]; then
-
-            echo
-            echo "ERREUR : sdkmanager moderne introuvable."
-
-            echo
-            echo "Recherche de sdkmanager dans le SDK :"
-
-            find "${SDK_ROOT}" \
-              -maxdepth 8 \
-              -type f \
-              -name sdkmanager \
-              -print \
-              || true
-
-            exit 1
-          fi
-
-
-          # ------------------------------------------------------
-          # Rendre sdkmanager exécutable.
-          # ------------------------------------------------------
-
-          chmod +x "${SDKMANAGER_MODERN}"
-
-
-          # ------------------------------------------------------
-          # Création du répertoire legacy.
-          # ------------------------------------------------------
-
-          mkdir -p "${SDK_ROOT}/tools"
-
-
-          # ------------------------------------------------------
-          # Si tools/bin existe déjà, il peut s'agir :
-          #
-          # - d'un ancien lien ;
-          # - d'un ancien répertoire ;
-          # - d'un contenu partiel.
-          #
-          # Nous le supprimons afin de créer un lien propre.
-          # ------------------------------------------------------
-
-          if [ -e "${SDK_ROOT}/tools/bin" ] || \
-             [ -L "${SDK_ROOT}/tools/bin" ]; then
-
-            echo
-            echo "Suppression de l'ancien chemin :"
-            echo "${SDK_ROOT}/tools/bin"
-
-            rm -rf "${SDK_ROOT}/tools/bin"
-          fi
-
-
-          # ------------------------------------------------------
-          # Création du lien symbolique.
-          # ------------------------------------------------------
-
-          ln -s \
-            "${SDK_ROOT}/cmdline-tools/latest/bin" \
-            "${SDK_ROOT}/tools/bin"
-
-
-          # ------------------------------------------------------
-          # Vérification du chemin moderne.
-          # ------------------------------------------------------
-
-          if [ ! -x "${SDKMANAGER_MODERN}" ]; then
-
-            echo
-            echo "ERREUR : sdkmanager moderne n'est pas exécutable."
-
-            exit 1
-          fi
-
-
-          # ------------------------------------------------------
-          # Vérification du chemin legacy.
-          #
-          # C'est cette vérification qui protège contre l'erreur
-          # rencontrée lors de la compilation précédente.
-          # ------------------------------------------------------
-
-          if [ ! -x "${SDKMANAGER_LEGACY}" ]; then
-
-            echo
-            echo "ERREUR : le chemin legacy de sdkmanager"
-            echo "n'est pas accessible :"
-
-            echo
-            echo "${SDKMANAGER_LEGACY}"
-
-            echo
-            echo "Contenu de tools/ :"
-
-            ls -la "${SDK_ROOT}/tools" \
-              || true
-
-            exit 1
-          fi
-
-
-          # ------------------------------------------------------
-          # Affichage du lien symbolique.
-          # ------------------------------------------------------
-
-          echo
-          echo "Lien symbolique créé :"
-
-          ls -la "${SDK_ROOT}/tools"
-
-
-          # ------------------------------------------------------
-          # Test du sdkmanager moderne.
-          # ------------------------------------------------------
-
-          echo
-          echo "Test sdkmanager moderne :"
-
-          "${SDKMANAGER_MODERN}" \
-            --version
-
-
-          # ------------------------------------------------------
-          # Test du sdkmanager legacy.
-          # ------------------------------------------------------
-
-          echo
-          echo "Test sdkmanager legacy :"
-
-          "${SDKMANAGER_LEGACY}" \
-            --version
-
-
-          echo
-          echo "================================================"
-          echo "COMPATIBILITÉ SDKMANAGER : OK"
-          echo "================================================"
-
-
-      # ==========================================================
-      # 12 - VÉRIFICATION DES OUTILS ANDROID
-      # ==========================================================
-
-      - name: "12 - Vérifier les outils Android"
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          SDK_ROOT="${ANDROID_SDK_ROOT_PATH}"
-
-          SDKMANAGER_MODERN="${SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager"
-
-          SDKMANAGER_LEGACY="${SDK_ROOT}/tools/bin/sdkmanager"
-
           echo "================================================"
           echo "VÉRIFICATION DU SDK ANDROID"
           echo "================================================"
 
-
-          # ------------------------------------------------------
-          # sdkmanager moderne
-          # ------------------------------------------------------
-
-          echo
-          echo "sdkmanager moderne :"
-
-          if [ ! -x "${SDKMANAGER_MODERN}" ]; then
-            echo
-            echo "ERREUR : sdkmanager moderne introuvable :"
-            echo "${SDKMANAGER_MODERN}"
-
-            exit 1
-          fi
-
-          "${SDKMANAGER_MODERN}" \
-            --version
-
-
-          # ------------------------------------------------------
-          # sdkmanager legacy.
-          #
-          # Buildozer / python-for-android peut utiliser ce chemin.
-          # ------------------------------------------------------
+          # ----------------------------------------------------
+          # Vérification sdkmanager.
+          # ----------------------------------------------------
 
           echo
-          echo "sdkmanager legacy :"
+          echo "sdkmanager :"
+          "${SDKMANAGER}" --version
 
-          if [ ! -x "${SDKMANAGER_LEGACY}" ]; then
-            echo
-            echo "ERREUR : sdkmanager legacy introuvable :"
-            echo "${SDKMANAGER_LEGACY}"
-
-            exit 1
-          fi
-
-          "${SDKMANAGER_LEGACY}" \
-            --version
-
-
-          # ------------------------------------------------------
-          # adb
-          # ------------------------------------------------------
+          # ----------------------------------------------------
+          # Vérification adb.
+          # ----------------------------------------------------
 
           echo
           echo "adb :"
 
-          "${SDK_ROOT}/platform-tools/adb" \
-            version
+          if [ ! -x "${SDK_ROOT}/platform-tools/adb" ]; then
+            echo "ERREUR : adb introuvable."
+            exit 1
+          fi
 
+          "${SDK_ROOT}/platform-tools/adb" version
 
-          # ------------------------------------------------------
-          # aapt
-          # ------------------------------------------------------
+          # ----------------------------------------------------
+          # Vérification aapt.
+          # ----------------------------------------------------
 
           echo
           echo "aapt :"
 
-          "${SDK_ROOT}/build-tools/${ANDROID_BUILD_TOOLS}/aapt" \
-            version
+          if [ ! -x "${SDK_ROOT}/build-tools/${ANDROID_BUILD_TOOLS}/aapt" ]; then
+            echo "ERREUR : aapt introuvable."
+            exit 1
+          fi
 
+          "${SDK_ROOT}/build-tools/${ANDROID_BUILD_TOOLS}/aapt" version
 
-          # ------------------------------------------------------
-          # aidl
-          # ------------------------------------------------------
+          # ----------------------------------------------------
+          # Vérification aidl.
+          # ----------------------------------------------------
 
           echo
           echo "aidl :"
 
-          "${SDK_ROOT}/build-tools/${ANDROID_BUILD_TOOLS}/aidl" \
-            --version \
-            || true
+          if [ ! -x "${SDK_ROOT}/build-tools/${ANDROID_BUILD_TOOLS}/aidl" ]; then
+            echo "ERREUR : aidl introuvable."
+            exit 1
+          fi
 
+          "${SDK_ROOT}/build-tools/${ANDROID_BUILD_TOOLS}/aidl" --version || true
 
-          # ------------------------------------------------------
-          # API Android 33
-          # ------------------------------------------------------
+          # ----------------------------------------------------
+          # Vérification de l'API Android.
+          # ----------------------------------------------------
 
           echo
           echo "API Android :"
 
           if [ ! -d "${SDK_ROOT}/platforms/android-${ANDROID_API}" ]; then
 
-            echo
-            echo "ERREUR : Android API ${ANDROID_API}"
-            echo "n'est pas installée."
+            echo "ERREUR :"
+            echo "android-${ANDROID_API} introuvable."
 
             exit 1
+
           fi
 
           echo "android-${ANDROID_API} : OK"
 
-
-          # ------------------------------------------------------
-          # Build Tools 34.0.0
-          # ------------------------------------------------------
+          # ----------------------------------------------------
+          # Vérification Build Tools.
+          # ----------------------------------------------------
 
           echo
           echo "Build Tools :"
 
           if [ ! -d "${SDK_ROOT}/build-tools/${ANDROID_BUILD_TOOLS}" ]; then
 
-            echo
-            echo "ERREUR : Build Tools ${ANDROID_BUILD_TOOLS}"
-            echo "ne sont pas installés."
+            echo "ERREUR :"
+            echo "build-tools ${ANDROID_BUILD_TOOLS} introuvable."
 
             exit 1
+
           fi
 
           echo "${ANDROID_BUILD_TOOLS} : OK"
 
+          # ----------------------------------------------------
+          # Vérification NDK.
+          # ----------------------------------------------------
 
-          # ------------------------------------------------------
-          # NDK 28.2.13676358
-          # ------------------------------------------------------
+          NDK_ROOT="${SDK_ROOT}/ndk/${ANDROID_NDK_VERSION}"
 
           echo
           echo "NDK :"
+          echo "${NDK_ROOT}"
 
-          NDK_PROPERTIES="${SDK_ROOT}/ndk/${ANDROID_NDK_VERSION}/source.properties"
+          if [ ! -f "${NDK_ROOT}/source.properties" ]; then
 
-          if [ ! -f "${NDK_PROPERTIES}" ]; then
-
-            echo
-            echo "ERREUR : source.properties du NDK est introuvable :"
-            echo "${NDK_PROPERTIES}"
+            echo "ERREUR : source.properties du NDK introuvable."
 
             exit 1
+
           fi
 
-          cat "${NDK_PROPERTIES}"
+          echo
+          cat "${NDK_ROOT}/source.properties"
 
+          echo
+          echo "NDK : OK"
+
+          # ----------------------------------------------------
+          # Vérification importante :
+          #
+          # aucun ancien sdkmanager ne doit être utilisé.
+          # ----------------------------------------------------
+
+          LEGACY_SDKMANAGER="${SDK_ROOT}/tools/bin/sdkmanager"
+
+          echo
+          echo "Ancien sdkmanager :"
+          echo "${LEGACY_SDKMANAGER}"
+
+          if [ -e "${LEGACY_SDKMANAGER}" ]; then
+
+            echo
+            echo "ERREUR : ancien sdkmanager détecté."
+            echo
+            echo "Ce workflow utilise exclusivement :"
+            echo "${SDKMANAGER}"
+
+            exit 1
+
+          fi
+
+          echo
+          echo "Ancien sdkmanager : absent / désactivé"
 
           echo
           echo "================================================"
@@ -1102,606 +683,375 @@ jobs:
           echo "================================================"
 
 
-      # ==========================================================
-      # 13 - VÉRIFICATION DE BUILDOZER.SPEC
-      # ==========================================================
-      #
-      # Cette étape vérifie que les principaux paramètres Android
-      # sont présents dans buildozer.spec.
-      #
-      # IMPORTANT :
-      # On évite ici les expressions régulières trop strictes.
-      #
-      # Un fichier INI peut contenir :
-      #
-      #   android.skip_update = 1
-      #
-      # ou :
-      #
-      #   android.skip_update = true
-      #
-      # ou encore des espaces supplémentaires.
-      #
-      # Le contrôle vérifie donc la présence et la valeur logique
-      # du paramètre sans dépendre exactement de la mise en forme.
-      # ==========================================================
+      # ========================================================
+      # 13 - VÉRIFIER LA CONFIGURATION BUILDOZER
+      # ========================================================
 
       - name: "13 - Vérifier buildozer.spec"
         shell: bash
         run: |
+
           set -euo pipefail
 
-          echo "================================================"
-          echo "VÉRIFICATION BUILDOZER.SPEC"
-          echo "================================================"
+          SPEC="buildozer.spec"
 
+          if [ ! -f "${SPEC}" ]; then
 
-          # ------------------------------------------------------
-          # Vérification de l'existence du fichier.
-          # ------------------------------------------------------
-
-          if [ ! -f buildozer.spec ]; then
-
-            echo
-            echo "ERREUR : buildozer.spec est introuvable."
+            echo "ERREUR : buildozer.spec introuvable."
 
             exit 1
+
           fi
-
-
-          # ------------------------------------------------------
-          # Affichage de la configuration Android.
-          # ------------------------------------------------------
 
           echo
-          echo "Configuration Android détectée :"
+          echo "================================================"
+          echo "CONFIGURATION BUILDOZER"
+          echo "================================================"
 
+          # Affichage des lignes Android importantes.
           grep -nE \
-            '^\[app\]|^android\.(api|minapi|sdk_build_tools|ndk|sdk_path|skip_update|archs)[[:space:]]*=' \
-            buildozer.spec \
+            '^\[app\]|android\.api|android\.minapi|android\.sdk_build_tools|android\.ndk|android\.sdk_path|android\.archs|android\.skip_update' \
+            "${SPEC}" \
             || true
 
-
-          # ------------------------------------------------------
-          # Vérification de la section [app].
-          # ------------------------------------------------------
-
-          if ! grep -qE '^\[app\][[:space:]]*$' buildozer.spec; then
-
-            echo
-            echo "ERREUR : la section [app] est absente."
-
-            exit 1
-          fi
-
-
-          # ------------------------------------------------------
-          # Vérification d'une ancienne section [app:android].
+          # ----------------------------------------------------
+          # Fonction permettant de récupérer proprement
+          # une propriété Buildozer.
           #
-          # Les paramètres Android doivent être directement
-          # définis dans [app].
-          # ------------------------------------------------------
+          # Les commentaires et espaces sont ignorés.
+          # ----------------------------------------------------
 
-          if grep -qE '^\[app:android\][[:space:]]*$' buildozer.spec; then
+          get_spec_value() {
 
-            echo
-            echo "ERREUR : une section [app:android] existe encore."
+            local KEY="$1"
 
-            echo
-            echo "Les paramètres Android doivent être placés"
-            echo "directement dans [app]."
-
-            exit 1
-          fi
-
-
-          # ------------------------------------------------------
-          # Fonction de vérification d'une propriété.
-          #
-          # On recherche la clé indépendamment du nombre d'espaces.
-          # ------------------------------------------------------
-
-          check_property() {
-
-            local property="$1"
-
-            if ! grep -qE \
-              "^[[:space:]]*${property}[[:space:]]*=" \
-              buildozer.spec; then
-
-              echo
-              echo "ERREUR : propriété absente : ${property}"
-
-              exit 1
-            fi
-          }
-
-
-          # ------------------------------------------------------
-          # Vérification des propriétés obligatoires.
-          # ------------------------------------------------------
-
-          check_property "android.api"
-
-          check_property "android.minapi"
-
-          check_property "android.sdk_build_tools"
-
-          check_property "android.ndk"
-
-          check_property "android.sdk_path"
-
-          check_property "android.skip_update"
-
-          check_property "android.archs"
-
-
-          # ------------------------------------------------------
-          # Vérification des valeurs importantes.
-          #
-          # On extrait la valeur située après le "=" puis on
-          # supprime les espaces.
-          # ------------------------------------------------------
-
-          get_property() {
-
-            local property="$1"
-
-            awk -F'=' -v key="${property}" '
-              $1 ~ "^[[:space:]]*" key "[[:space:]]*$" {
+            awk -F '=' -v key="${KEY}" '
+              $0 !~ /^[[:space:]]*#/ &&
+              $0 ~ "^[[:space:]]*" key "[[:space:]]*=" {
                 value=$2
-
-                # Supprimer les espaces au début.
-                sub(/^[[:space:]]+/, "", value)
-
-                # Supprimer les espaces à la fin.
-                sub(/[[:space:]]+$/, "", value)
-
+                gsub(/^[[:space:]]+|[[:space:]]+$/, "", value)
                 print value
                 exit
               }
-            ' buildozer.spec
+            ' "${SPEC}"
+
           }
 
+          API_VALUE="$(get_spec_value "android.api")"
+          MIN_API_VALUE="$(get_spec_value "android.minapi")"
+          BUILD_TOOLS_VALUE="$(get_spec_value "android.sdk_build_tools")"
+          NDK_VALUE="$(get_spec_value "android.ndk")"
+          SDK_PATH_VALUE="$(get_spec_value "android.sdk_path")"
+          ARCHS_VALUE="$(get_spec_value "android.archs")"
+          SKIP_UPDATE_VALUE="$(get_spec_value "android.skip_update")"
 
-          # ------------------------------------------------------
-          # API Android.
-          # ------------------------------------------------------
+          echo
+          echo "Valeurs détectées :"
 
-          ANDROID_API_VALUE="$(get_property "android.api")"
+          echo "android.api = ${API_VALUE}"
+          echo "android.minapi = ${MIN_API_VALUE}"
+          echo "android.sdk_build_tools = ${BUILD_TOOLS_VALUE}"
+          echo "android.ndk = ${NDK_VALUE}"
+          echo "android.sdk_path = ${SDK_PATH_VALUE}"
+          echo "android.archs = ${ARCHS_VALUE}"
+          echo "android.skip_update = ${SKIP_UPDATE_VALUE}"
 
-          if [ "${ANDROID_API_VALUE}" != "33" ]; then
+          # ----------------------------------------------------
+          # Vérification API.
+          # ----------------------------------------------------
 
-            echo
-            echo "ERREUR : android.api doit être 33."
-
-            echo "Valeur détectée : ${ANDROID_API_VALUE}"
-
-            exit 1
-          fi
-
-
-          # ------------------------------------------------------
-          # API minimale.
-          # ------------------------------------------------------
-
-          ANDROID_MIN_API_VALUE="$(get_property "android.minapi")"
-
-          if [ "${ANDROID_MIN_API_VALUE}" != "24" ]; then
-
-            echo
-            echo "ERREUR : android.minapi doit être 24."
-
-            echo "Valeur détectée : ${ANDROID_MIN_API_VALUE}"
-
-            exit 1
-          fi
-
-
-          # ------------------------------------------------------
-          # Build Tools.
-          # ------------------------------------------------------
-
-          ANDROID_BUILD_TOOLS_VALUE="$(get_property "android.sdk_build_tools")"
-
-          if [ "${ANDROID_BUILD_TOOLS_VALUE}" != "34.0.0" ]; then
+          if [ "${API_VALUE}" != "${ANDROID_API}" ]; then
 
             echo
-            echo "ERREUR : android.sdk_build_tools doit être 34.0.0."
-
-            echo "Valeur détectée : ${ANDROID_BUILD_TOOLS_VALUE}"
+            echo "ERREUR : android.api incorrect."
 
             exit 1
+
           fi
 
+          # ----------------------------------------------------
+          # Vérification min API.
+          # ----------------------------------------------------
 
-          # ------------------------------------------------------
-          # NDK.
-          # ------------------------------------------------------
+          if [ "${MIN_API_VALUE}" != "${ANDROID_MIN_API}" ]; then
 
-          ANDROID_NDK_VALUE="$(get_property "android.ndk")"
+            echo
+            echo "ERREUR : android.minapi incorrect."
 
-          if [ "${ANDROID_NDK_VALUE}" != "28c" ]; then
+            exit 1
+
+          fi
+
+          # ----------------------------------------------------
+          # Vérification Build Tools.
+          # ----------------------------------------------------
+
+          if [ "${BUILD_TOOLS_VALUE}" != "${ANDROID_BUILD_TOOLS}" ]; then
+
+            echo
+            echo "ERREUR : android.sdk_build_tools incorrect."
+
+            exit 1
+
+          fi
+
+          # ----------------------------------------------------
+          # Vérification NDK.
+          #
+          # Buildozer utilise "28c".
+          # sdkmanager installe la version exacte :
+          # "28.2.13676358".
+          # ----------------------------------------------------
+
+          if [ "${NDK_VALUE}" != "28c" ]; then
 
             echo
             echo "ERREUR : android.ndk doit être 28c."
 
-            echo "Valeur détectée : ${ANDROID_NDK_VALUE}"
-
             exit 1
+
           fi
 
+          # ----------------------------------------------------
+          # Vérification chemin SDK.
+          # ----------------------------------------------------
 
-          # ------------------------------------------------------
-          # Chemin du SDK.
-          # ------------------------------------------------------
-
-          ANDROID_SDK_PATH_VALUE="$(get_property "android.sdk_path")"
-
-          if [ "${ANDROID_SDK_PATH_VALUE}" != ".android-sdk" ]; then
+          if [ "${SDK_PATH_VALUE}" != ".android-sdk" ]; then
 
             echo
             echo "ERREUR : android.sdk_path doit être .android-sdk."
 
-            echo "Valeur détectée : ${ANDROID_SDK_PATH_VALUE}"
-
             exit 1
+
           fi
 
+          # ----------------------------------------------------
+          # Vérification architectures.
+          # ----------------------------------------------------
 
-          # ------------------------------------------------------
-          # android.skip_update.
+          if [[ "${ARCHS_VALUE}" != *"arm64-v8a"* ]]; then
+
+            echo
+            echo "ERREUR : arm64-v8a absent."
+
+            exit 1
+
+          fi
+
+          if [[ "${ARCHS_VALUE}" != *"armeabi-v7a"* ]]; then
+
+            echo
+            echo "ERREUR : armeabi-v7a absent."
+
+            exit 1
+
+          fi
+
+          # ----------------------------------------------------
+          # Vérification skip_update.
           #
-          # Buildozer accepte une valeur booléenne.
-          #
-          # Nous acceptons donc :
+          # Plusieurs écritures sont acceptées :
           #
           #   1
           #   true
-          #   True
-          #   TRUE
           #   yes
-          #
-          # afin de ne pas bloquer le workflow à cause de la
-          # représentation choisie dans le fichier INI.
-          # ------------------------------------------------------
+          #   on
+          # ----------------------------------------------------
 
-          ANDROID_SKIP_UPDATE_VALUE="$(get_property "android.skip_update")"
-
-          case "${ANDROID_SKIP_UPDATE_VALUE,,}" in
+          case "${SKIP_UPDATE_VALUE,,}" in
 
             1|true|yes|on)
-
               echo
-              echo "android.skip_update = ${ANDROID_SKIP_UPDATE_VALUE}"
-
-              echo "Valeur activée : OK"
-
+              echo "android.skip_update : OK"
               ;;
 
-
             *)
-
               echo
               echo "ERREUR : android.skip_update doit être activé."
-
-              echo "Valeur détectée : ${ANDROID_SKIP_UPDATE_VALUE}"
-
-              echo
-              echo "Valeurs acceptées : 1, true, yes ou on."
-
               exit 1
-
               ;;
 
           esac
 
-
-          # ------------------------------------------------------
-          # Architecture.
-          # ------------------------------------------------------
-
-          ANDROID_ARCHS_VALUE="$(get_property "android.archs")"
-
-          if [[ "${ANDROID_ARCHS_VALUE}" != *"arm64-v8a"* ]]; then
-
-            echo
-            echo "ERREUR : arm64-v8a est absent de android.archs."
-
-            echo "Valeur détectée : ${ANDROID_ARCHS_VALUE}"
-
-            exit 1
-          fi
-
-
-          if [[ "${ANDROID_ARCHS_VALUE}" != *"armeabi-v7a"* ]]; then
-
-            echo
-            echo "ERREUR : armeabi-v7a est absent de android.archs."
-
-            echo "Valeur détectée : ${ANDROID_ARCHS_VALUE}"
-
-            exit 1
-          fi
-
-
-          # ------------------------------------------------------
-          # Résumé.
-          # ------------------------------------------------------
-
           echo
           echo "================================================"
-          echo "CONFIGURATION BUILDOZER.SPEC : VALIDE"
-          echo "================================================"
-
-          echo
-          echo "API Android       : ${ANDROID_API_VALUE}"
-
-          echo "API minimale      : ${ANDROID_MIN_API_VALUE}"
-
-          echo "Build Tools       : ${ANDROID_BUILD_TOOLS_VALUE}"
-
-          echo "NDK               : ${ANDROID_NDK_VALUE}"
-
-          echo "SDK               : ${ANDROID_SDK_PATH_VALUE}"
-
-          echo "Skip update       : ${ANDROID_SKIP_UPDATE_VALUE}"
-
-          echo "Architectures     : ${ANDROID_ARCHS_VALUE}"
-
-          echo
+          echo "buildozer.spec : OK"
           echo "================================================"
 
 
-      # ==========================================================
-      # 14 - VÉRIFICATION DE LA SUPPRESSION DE REPORTLAB
-      # ==========================================================
-      #
-      # ReportLab a été supprimé de l'application.
-      #
-      # IMPORTANT :
-      # Cette vérification ne doit PAS rechercher simplement le mot
-      # "reportlab" dans tout le fichier.
-      #
-      # Pourquoi ?
-      #
-      # Le buildozer.spec peut contenir des commentaires comme :
-      #
-      #   # ReportLab est volontairement absent.
-      #
-      # Ces commentaires ne sont pas lus comme des dépendances
-      # par Buildozer.
-      #
-      # Nous vérifions donc uniquement les configurations actives
-      # qui pourraient réellement réintroduire ReportLab.
-      # ==========================================================
+      # ========================================================
+      # 14 - VÉRIFIER L'ABSENCE DE REPORTLAB
+      # ========================================================
 
-      - name: "14 - Vérifier suppression de ReportLab"
+      - name: "14 - Vérifier la suppression de ReportLab"
         shell: bash
         run: |
+
           set -euo pipefail
 
+          echo
           echo "================================================"
           echo "VÉRIFICATION REPORTLAB"
           echo "================================================"
 
-
-          # ======================================================
-          # 14.1 - VÉRIFICATION DES FICHIERS PYTHON
-          # ======================================================
+          # ----------------------------------------------------
+          # Vérification des fichiers Python.
+          #
+          # Les références PDF ReportLab ne doivent plus être
+          # présentes dans le code Python actif.
+          # ----------------------------------------------------
 
           echo
           echo "Recherche dans les fichiers Python..."
 
           if grep -RniE \
-            "reportlab|generer_rapport_pdf" \
+            --include='*.py' \
+            '(^|[^[:alnum:]_])reportlab([^[:alnum:]_]|$)|generer_rapport_pdf' \
             . \
-            --include="*.py" \
             --exclude-dir=.git \
             --exclude-dir=.buildozer \
-            --exclude-dir=.android-sdk; then
+            --exclude-dir=.android-sdk
+          then
 
             echo
-            echo "ERREUR : une référence ReportLab existe encore"
-            echo "dans le code Python."
+            echo "ERREUR : référence ReportLab détectée dans le code Python."
 
             exit 1
+
           fi
 
-          echo "Aucune référence ReportLab dans le code Python."
+          # ----------------------------------------------------
+          # Nettoyage de buildozer.spec :
+          #
+          # Les commentaires ne doivent pas provoquer de faux
+          # positifs.
+          # ----------------------------------------------------
 
-
-          # ======================================================
-          # 14.2 - VÉRIFICATION DES DÉPENDANCES DE BUILDOZER.SPEC
-          # ======================================================
-
-          echo
-          echo "Vérification des paramètres actifs de buildozer.spec..."
-
-          SPEC_CLEAN="${RUNNER_TEMP}/buildozer-spec-clean.txt"
+          SPEC_CLEAN="${RUNNER_TEMP}/buildozer-spec-active.txt"
 
           sed \
-            -E \
-            '/^[[:space:]]*[#;]/d' \
+            '/^[[:space:]]*#/d' \
             buildozer.spec \
             > "${SPEC_CLEAN}"
 
-
           echo
-          echo "Configuration active de buildozer.spec :"
-
-          cat "${SPEC_CLEAN}"
-
-
-          # ------------------------------------------------------
-          # Extraction de la ligne requirements.
-          #
-          # Nous faisons cette vérification en deux temps afin
-          # d'éviter une expression régulière ambiguë avec
-          # l'opérateur ^ placé à l'intérieur d'un motif complexe.
-          # ------------------------------------------------------
-
-          echo
-          echo "Recherche de ReportLab dans les dépendances..."
-
-          REQUIREMENTS_LINE="$(
-            grep -Ei \
-              '^[[:space:]]*requirements[[:space:]]*=' \
-              "${SPEC_CLEAN}" \
-              || true
-          )"
-
-
-          if printf '%s\n' "${REQUIREMENTS_LINE}" |
-             grep -qiE \
-               '(^|[,[:space:]])reportlab([<>=!~0-9]|[,[:space:]]|$)'; then
-
-            echo
-            echo "ERREUR : ReportLab est encore présent dans"
-            echo "les dépendances actives de buildozer.spec."
-
-            echo
-            echo "Ligne détectée :"
-            echo "${REQUIREMENTS_LINE}"
-
-            exit 1
-          fi
-
-
-          # ------------------------------------------------------
-          # Recherche d'une recette locale Python-for-Android.
-          # ------------------------------------------------------
-
-          echo
-          echo "Recherche de recettes locales..."
+          echo "Recherche dans buildozer.spec..."
 
           if grep -niE \
-            '^[[:space:]]*p4a\.local_recipes[[:space:]]*=' \
-            "${SPEC_CLEAN}"; then
+            'reportlab|generer_rapport_pdf' \
+            "${SPEC_CLEAN}"
+          then
 
             echo
-            echo "ERREUR : p4a.local_recipes est encore configuré."
+            echo "ERREUR : référence ReportLab active dans buildozer.spec."
 
             exit 1
+
           fi
 
+          # ----------------------------------------------------
+          # Vérification des requirements.
+          # ----------------------------------------------------
 
-          # ======================================================
-          # 14.3 - VÉRIFICATION DE requirements.txt
-          # ======================================================
-
-          if [ -f requirements.txt ]; then
+          if grep -niE \
+            '^[[:space:]]*requirements[[:space:]]*=' \
+            "${SPEC_CLEAN}" \
+            | grep -qiE \
+              '(^|[=,[:space:]])reportlab([<>=!~0-9]|$)'
+          then
 
             echo
-            echo "Vérification de requirements.txt..."
+            echo "ERREUR : ReportLab présent dans requirements."
 
-            REQUIREMENTS_CLEAN="${RUNNER_TEMP}/requirements-clean.txt"
+            exit 1
+
+          fi
+
+          # ----------------------------------------------------
+          # Vérification requirements.txt.
+          # ----------------------------------------------------
+
+          if [ -f "requirements.txt" ]; then
+
+            REQUIREMENTS_CLEAN="${RUNNER_TEMP}/requirements-active.txt"
 
             sed \
-              -E \
-              '/^[[:space:]]*#/d; /^[[:space:]]*$/d' \
+              -e '/^[[:space:]]*#/d' \
+              -e '/^[[:space:]]*$/d' \
               requirements.txt \
               > "${REQUIREMENTS_CLEAN}"
 
-
             if grep -niE \
-              '^[[:space:]]*reportlab([<>=!~]|$)' \
-              "${REQUIREMENTS_CLEAN}"; then
+              '^reportlab([<>=!~]|$)' \
+              "${REQUIREMENTS_CLEAN}"
+            then
 
               echo
-              echo "ERREUR : ReportLab est encore présent"
-              echo "dans requirements.txt."
+              echo "ERREUR : ReportLab présent dans requirements.txt."
 
               exit 1
+
             fi
-
-            echo "requirements.txt : aucune dépendance ReportLab."
-
-          else
-
-            echo
-            echo "AVERTISSEMENT : requirements.txt est absent."
 
           fi
 
+          # ----------------------------------------------------
+          # Vérification des recettes locales p4a.
+          # ----------------------------------------------------
 
-          # ======================================================
-          # 14.4 - VÉRIFICATION DES RECETTES LOCALES
-          # ======================================================
+          if [ -d "p4a.local_recipes" ]; then
 
-          if [ -d p4a-recipes ]; then
-
-            echo
-            echo "Vérification du répertoire p4a-recipes..."
-
-            REPORTLAB_RECIPES="$(
-              find p4a-recipes \
-                -iname "*reportlab*" \
-                -print
-            )"
-
-
-            if [ -n "${REPORTLAB_RECIPES}" ]; then
+            if find p4a.local_recipes \
+              -iname '*reportlab*' \
+              -print \
+              | grep -q .
+            then
 
               echo
-              echo "ERREUR : une recette ReportLab existe encore :"
-
-              echo "${REPORTLAB_RECIPES}"
+              echo "ERREUR : recette locale ReportLab détectée."
 
               exit 1
+
             fi
-
-            echo "Aucune recette ReportLab dans p4a-recipes/."
-
-          else
-
-            echo
-            echo "p4a-recipes/ absent : aucune recette locale."
 
           fi
 
-
-          # ======================================================
-          # 14.5 - RÉSULTAT FINAL
-          # ======================================================
+          echo
+          echo "ReportLab : aucune référence active détectée."
 
           echo
           echo "================================================"
-          echo "REPORTLAB : CORRECTEMENT SUPPRIMÉ"
+          echo "VÉRIFICATION REPORTLAB : OK"
           echo "================================================"
 
-          echo
-          echo "Les commentaires documentaires ne sont pas considérés"
-          echo "comme des dépendances."
 
-          echo
-          echo "Aucune référence ReportLab active n'a été détectée."
+      # ========================================================
+      # 15 - NETTOYER L'ANCIEN ENVIRONNEMENT BUILDOZER
+      # ========================================================
 
-
-      # ==========================================================
-      # 15 - NETTOYAGE DU CACHE BUILDOZER
-      # ==========================================================
-      #
-      # IMPORTANT :
-      #
-      # Nous supprimons UNIQUEMENT .buildozer.
-      #
-      # Nous ne supprimons PAS :
-      #
-      #   .android-sdk
-      #
-      # car ce répertoire contient le SDK que Buildozer doit
-      # maintenant utiliser.
-      # ==========================================================
-
-      - name: "15 - Nettoyer le cache Buildozer"
+      - name: "15 - Nettoyer l'ancien environnement Buildozer"
         shell: bash
         run: |
+
           set -euo pipefail
 
+          echo
           echo "================================================"
           echo "NETTOYAGE BUILDOZER"
           echo "================================================"
+
+          # ----------------------------------------------------
+          # IMPORTANT :
+          #
+          # Nous supprimons uniquement .buildozer.
+          #
+          # Nous NE supprimons PAS :
+          #
+          #   .android-sdk
+          #
+          # car le SDK vient d'être correctement installé
+          # et vérifié par les étapes précédentes.
+          # ----------------------------------------------------
 
           rm -rf .buildozer
 
@@ -1709,52 +1059,41 @@ jobs:
           echo ".buildozer supprimé."
 
           echo
-          echo "Vérification du SDK :"
+          echo ".android-sdk conservé."
 
-          if [ ! -d "${ANDROID_SDK_ROOT_PATH}" ]; then
+          if [ ! -x \
+            "${ANDROID_SDK_ROOT_PATH}/cmdline-tools/latest/bin/sdkmanager" \
+          ]; then
 
             echo
-            echo "ERREUR : .android-sdk a été supprimé ou"
-            echo "n'existe plus."
+            echo "ERREUR : sdkmanager absent après nettoyage."
 
             exit 1
+
           fi
 
           echo
-          echo ".android-sdk est toujours présent."
-
-          echo
-          echo "================================================"
-          echo "NETTOYAGE : OK"
-          echo "================================================"
+          echo "SDK Android toujours disponible."
 
 
-      # ==========================================================
-      # 16 - DERNIÈRE VÉRIFICATION DU SDK
-      # ==========================================================
-      #
-      # Cette étape est volontairement placée juste avant
-      # Buildozer.
-      #
-      # Elle garantit que le SDK n'a pas disparu pendant les
-      # étapes précédentes.
-      # ==========================================================
+      # ========================================================
+      # 16 - VÉRIFICATION FINALE DU SDK AVANT BUILDOZER
+      # ========================================================
 
       - name: "16 - Vérifier le SDK juste avant Buildozer"
         shell: bash
         run: |
+
           set -euo pipefail
 
           SDK_ROOT="${ANDROID_SDK_ROOT_PATH}"
 
-          SDKMANAGER_MODERN="${SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager"
+          SDKMANAGER="${SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager"
 
-          SDKMANAGER_LEGACY="${SDK_ROOT}/tools/bin/sdkmanager"
-
+          echo
           echo "================================================"
-          echo "SDK UTILISÉ PAR BUILDOZER"
+          echo "SDK FINAL AVANT BUILD"
           echo "================================================"
-
 
           echo
           echo "ANDROID_HOME :"
@@ -1769,233 +1108,94 @@ jobs:
           echo "${ANDROID_NDK_HOME}"
 
           echo
-          echo "SDK_ROOT attendu :"
-          echo "${SDK_ROOT}"
+          echo "sdkmanager :"
+          echo "${SDKMANAGER}"
 
-
-          # ------------------------------------------------------
-          # Vérification que les variables pointent bien vers le
-          # SDK du projet.
-          # ------------------------------------------------------
-
-          if [ "${ANDROID_HOME}" != "${SDK_ROOT}" ]; then
-
-            echo
-            echo "ERREUR : ANDROID_HOME ne pointe pas vers"
-            echo ".android-sdk."
-
-            exit 1
-          fi
-
-
-          if [ "${ANDROID_SDK_ROOT}" != "${SDK_ROOT}" ]; then
-
-            echo
-            echo "ERREUR : ANDROID_SDK_ROOT ne pointe pas vers"
-            echo ".android-sdk."
-
-            exit 1
-          fi
-
-
-          # ------------------------------------------------------
           # Vérification du sdkmanager moderne.
-          # ------------------------------------------------------
+          "${SDKMANAGER}" --version
 
-          echo
-          echo "sdkmanager moderne :"
+          # Vérification du SDK root.
+          test -d "${SDK_ROOT}"
 
-          if [ ! -x "${SDKMANAGER_MODERN}" ]; then
+          # Vérification API.
+          test -d \
+            "${SDK_ROOT}/platforms/android-${ANDROID_API}"
+
+          # Vérification Build Tools.
+          test -d \
+            "${SDK_ROOT}/build-tools/${ANDROID_BUILD_TOOLS}"
+
+          # Vérification NDK.
+          test -d \
+            "${SDK_ROOT}/ndk/${ANDROID_NDK_VERSION}"
+
+          # Vérification absence de l'ancien sdkmanager.
+          if [ -e "${SDK_ROOT}/tools/bin/sdkmanager" ]; then
 
             echo
-            echo "ERREUR : sdkmanager moderne est introuvable :"
-
-            echo "${SDKMANAGER_MODERN}"
+            echo "ERREUR : ancien sdkmanager détecté."
 
             exit 1
-          fi
 
-          "${SDKMANAGER_MODERN}" \
-            --version
-
-
-          # ------------------------------------------------------
-          # Vérification du sdkmanager legacy.
-          #
-          # C'est le chemin utilisé dans l'erreur précédente.
-          # ------------------------------------------------------
-
-          echo
-          echo "sdkmanager legacy :"
-
-          if [ ! -x "${SDKMANAGER_LEGACY}" ]; then
-
-            echo
-            echo "ERREUR : sdkmanager legacy est introuvable :"
-
-            echo "${SDKMANAGER_LEGACY}"
-
-            echo
-            echo "Contenu de tools/ :"
-
-            ls -la "${SDK_ROOT}/tools" \
-              || true
-
-            exit 1
-          fi
-
-          "${SDKMANAGER_LEGACY}" \
-            --version
-
-
-          # ------------------------------------------------------
-          # Vérification de aidl.
-          #
-          # C'est précisément l'outil qui manquait dans un log
-          # précédent.
-          # ------------------------------------------------------
-
-          AIDL="${SDK_ROOT}/build-tools/${ANDROID_BUILD_TOOLS}/aidl"
-
-          if [ ! -x "${AIDL}" ]; then
-
-            echo
-            echo "ERREUR : aidl est introuvable :"
-
-            echo "${AIDL}"
-
-            exit 1
           fi
 
           echo
-          echo "aidl :"
-
-          "${AIDL}" \
-            --version \
-            || true
+          echo "SDK final : OK."
 
 
-          # ------------------------------------------------------
-          # Vérification de l'API Android.
-          # ------------------------------------------------------
-
-          if [ ! -d "${SDK_ROOT}/platforms/android-${ANDROID_API}" ]; then
-
-            echo
-            echo "ERREUR : Android API ${ANDROID_API}"
-            echo "introuvable."
-
-            exit 1
-          fi
-
-
-          # ------------------------------------------------------
-          # Vérification du Build Tools.
-          # ------------------------------------------------------
-
-          if [ ! -d "${SDK_ROOT}/build-tools/${ANDROID_BUILD_TOOLS}" ]; then
-
-            echo
-            echo "ERREUR : Build Tools ${ANDROID_BUILD_TOOLS}"
-            echo "introuvables."
-
-            exit 1
-          fi
-
-
-          # ------------------------------------------------------
-          # Vérification du NDK.
-          # ------------------------------------------------------
-
-          if [ ! -f "${SDK_ROOT}/ndk/${ANDROID_NDK_VERSION}/source.properties" ]; then
-
-            echo
-            echo "ERREUR : NDK ${ANDROID_NDK_VERSION}"
-            echo "introuvable."
-
-            exit 1
-          fi
-
-
-          echo
-          echo "================================================"
-          echo "SDK PRÊT POUR BUILDOZER"
-          echo "================================================"
-
-
-      # ==========================================================
-      # 17 - AFFICHAGE DE LA CONFIGURATION BUILDOZER
-      # ==========================================================
-      #
-      # Cette étape permet de voir dans les logs la configuration
-      # réellement utilisée avant de lancer une compilation
-      # potentiellement longue.
-      # ==========================================================
+      # ========================================================
+      # 17 - AFFICHER LA CONFIGURATION BUILDOZER
+      # ========================================================
 
       - name: "17 - Afficher la configuration Buildozer"
         shell: bash
         run: |
+
           set -euo pipefail
 
+          echo
           echo "================================================"
-          echo "CONFIGURATION BUILDOZER"
+          echo "CONFIGURATION BUILDOZER AVANT COMPILATION"
           echo "================================================"
 
+          # Affichage des variables Android.
+          echo
+          echo "Variables Android :"
+
+          echo "ANDROID_HOME=${ANDROID_HOME}"
+          echo "ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT}"
+          echo "ANDROID_NDK_HOME=${ANDROID_NDK_HOME}"
+
+          # Affichage de la version Buildozer.
           echo
           echo "Buildozer :"
+
           buildozer --version
 
+          # Affichage des paramètres Android du fichier.
           echo
-          echo "Répertoire courant :"
-          pwd
+          echo "buildozer.spec :"
 
-          echo
-          echo "SDK Android :"
-          echo "${ANDROID_SDK_ROOT}"
-
-          echo
-          echo "NDK Android :"
-          echo "${ANDROID_NDK_HOME}"
+          grep -nE \
+            '^\[app\]|android\.' \
+            buildozer.spec \
+            || true
 
           echo
-          echo "Configuration buildozer.spec :"
-
-          sed -n \
-            '/^\[app\]/,/^\[buildozer\]/p' \
-            buildozer.spec
+          echo "================================================"
 
 
-      # ==========================================================
-      # 18 - COMPILATION DE L'APK
-      # ==========================================================
-      #
-      # Le point essentiel ici est que Buildozer doit maintenant
-      # lire :
-      #
-      #   android.sdk_path = .android-sdk
-      #
-      # depuis [app] dans buildozer.spec.
-      #
-      # Et :
-      #
-      #   android.skip_update = 1
-      #
-      # empêche Buildozer de tenter une mise à jour automatique
-      # du SDK.
-      #
-      # Le chemin legacy sdkmanager est également disponible :
-      #
-      #   .android-sdk/tools/bin/sdkmanager
-      #
-      # afin de satisfaire les composants de la chaîne de build
-      # qui utilisent encore cet ancien emplacement.
-      # ==========================================================
+      # ========================================================
+      # 18 - CONSTRUIRE L'APK
+      # ========================================================
 
       - name: "18 - Construire l'APK Android"
         shell: bash
         run: |
+
           set -euo pipefail
 
+          echo
           echo "================================================"
           echo "DÉBUT DE LA COMPILATION ANDROID"
           echo "================================================"
@@ -2005,302 +1205,212 @@ jobs:
           echo "${ANDROID_SDK_ROOT}"
 
           echo
-          echo "NDK utilisé :"
-          echo "${ANDROID_NDK_HOME}"
-
-          echo
-          echo "Build Tools attendus :"
-          echo "${ANDROID_BUILD_TOOLS}"
-
-          echo
-          echo "API Android :"
-          echo "${ANDROID_API}"
-
-          echo
-          echo "API minimale :"
-          echo "${ANDROID_MIN_API}"
-
-          echo
-          echo "sdkmanager moderne :"
+          echo "sdkmanager utilisé :"
           echo "${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager"
 
           echo
-          echo "sdkmanager legacy :"
-          echo "${ANDROID_SDK_ROOT}/tools/bin/sdkmanager"
+          echo "Lancement de Buildozer..."
 
-          echo
-          echo "================================================"
-          echo "BUILDOZER ANDROID DEBUG"
-          echo "================================================"
+          # ----------------------------------------------------
+          # Compilation de l'APK debug.
+          #
+          # Le fichier buildozer.spec contient :
+          #
+          #   android.sdk_path = .android-sdk
+          #   android.skip_update = 1
+          #
+          # Buildozer doit donc utiliser le SDK installé
+          # précédemment et ne pas essayer de reconstruire
+          # un SDK différent dans ~/.buildozer.
+          # ----------------------------------------------------
 
           buildozer android debug
 
+          echo
+          echo "================================================"
+          echo "COMPILATION TERMINÉE"
+          echo "================================================"
 
-      # ==========================================================
-      # 19 - RECHERCHE DE L'APK
-      # ==========================================================
-      #
-      # Après une compilation réussie, Buildozer place normalement
-      # l'APK dans :
-      #
-      #   bin/
-      #
-      # Cette étape vérifie que le fichier existe réellement.
-      # ==========================================================
 
-      - name: "19 - Vérifier l'APK généré"
+      # ========================================================
+      # 19 - RECHERCHER L'APK
+      # ========================================================
+
+      - name: "19 - Rechercher l'APK généré"
         shell: bash
         run: |
+
           set -euo pipefail
 
+          echo
           echo "================================================"
           echo "RECHERCHE DE L'APK"
           echo "================================================"
 
-          if [ ! -d bin ]; then
+          # Recherche de tous les APK générés.
+          find . \
+            -type f \
+            -name "*.apk" \
+            -not -path "./.git/*" \
+            -print
 
-            echo
-            echo "ERREUR : le répertoire bin/ n'existe pas."
-
-            exit 1
-          fi
-
-
+          # Vérification qu'au moins un APK existe.
           APK_COUNT="$(
-            find bin \
-              -maxdepth 1 \
+            find . \
               -type f \
               -name "*.apk" \
+              -not -path "./.git/*" \
               | wc -l
           )"
 
-
           echo
           echo "Nombre d'APK trouvés : ${APK_COUNT}"
-
 
           if [ "${APK_COUNT}" -eq 0 ]; then
 
             echo
             echo "ERREUR : aucun APK n'a été généré."
 
-            echo
-            echo "Contenu de bin/ :"
-
-            find bin \
-              -maxdepth 2 \
-              -type f \
-              -print \
-              || true
-
             exit 1
+
           fi
 
-
           echo
-          echo "APK générés :"
-
-          find bin \
-            -maxdepth 1 \
-            -type f \
-            -name "*.apk" \
-            -print
-
-
-          echo
-          echo "Type des APK :"
-
-          find bin \
-            -maxdepth 1 \
-            -type f \
-            -name "*.apk" \
-            -exec file {} \;
-
-
-          echo
-          echo "================================================"
           echo "APK : OK"
-          echo "================================================"
 
 
-      # ==========================================================
-      # 20 - TÉLÉVERSEMENT DE L'APK
-      # ==========================================================
-      #
-      # L'APK est publié comme artefact GitHub Actions.
-      #
-      # Après la fin du workflow :
-      #
-      # GitHub
-      #   → Actions
-      #   → workflow Build Android APK - Suivi Auto
-      #   → Artifacts
-      #   → suivi-auto-apk
-      #
-      # permettra de récupérer l'APK.
-      # ==========================================================
+      # ========================================================
+      # 20 - PUBLIER L'APK COMME ARTIFACT
+      # ========================================================
 
-      - name: "20 - Publier l'APK comme artefact"
+      - name: "20 - Publier l'APK"
         uses: actions/upload-artifact@v4
 
         with:
+
+          # Nom de l'artifact visible dans GitHub Actions.
           name: suivi-auto-apk
 
+          # Tous les APK présents dans bin/.
           path: bin/*.apk
 
+          # Évite qu'une absence de fichier provoque un résultat
+          # silencieux.
           if-no-files-found: error
 
-          retention-days: 14
 
-
-      # ==========================================================
+      # ========================================================
       # 21 - DIAGNOSTICS EN CAS D'ÉCHEC
-      # ==========================================================
-      #
-      # Cette étape est exécutée uniquement si une étape
-      # précédente échoue.
-      #
-      # Elle permet de récupérer rapidement les informations
-      # nécessaires au diagnostic sans devoir modifier le
-      # workflow à chaque tentative.
-      # ==========================================================
+      # ========================================================
 
       - name: "21 - Diagnostics en cas d'échec"
         if: failure()
         shell: bash
         run: |
+
+          # ----------------------------------------------------
+          # Cette étape ne doit jamais masquer l'erreur initiale.
+          #
+          # Elle sert uniquement à fournir des informations
+          # supplémentaires dans les logs GitHub Actions.
+          # ----------------------------------------------------
+
+          set +e
+
+          echo
           echo "================================================"
-          echo "DIAGNOSTICS DE COMPILATION"
+          echo "DIAGNOSTICS DE BUILD"
           echo "================================================"
 
           echo
-          echo "Répertoire courant :"
-          pwd
+          echo "Python :"
+          python --version
 
           echo
-          echo "Contenu racine :"
-          ls -la || true
-
-          echo
-          echo "Variables Android :"
-
-          echo "ANDROID_HOME=${ANDROID_HOME:-non défini}"
-
-          echo "ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT:-non défini}"
-
-          echo "ANDROID_NDK_HOME=${ANDROID_NDK_HOME:-non défini}"
-
-
-          echo
-          echo "SDK Android :"
-
-          if [ -d "${ANDROID_SDK_ROOT_PATH}" ]; then
-
-            echo
-            echo "sdkmanager moderne :"
-
-            ls -la \
-              "${ANDROID_SDK_ROOT_PATH}/cmdline-tools/latest/bin/sdkmanager" \
-              2>/dev/null \
-              || true
-
-
-            echo
-            echo "sdkmanager legacy :"
-
-            ls -la \
-              "${ANDROID_SDK_ROOT_PATH}/tools/bin/sdkmanager" \
-              2>/dev/null \
-              || true
-
-
-            echo
-            echo "Build Tools :"
-
-            find "${ANDROID_SDK_ROOT_PATH}/build-tools" \
-              -maxdepth 2 \
-              -type f \
-              -name "aidl" \
-              -print \
-              2>/dev/null \
-              || true
-
-
-            echo
-            echo "Platforms :"
-
-            find "${ANDROID_SDK_ROOT_PATH}/platforms" \
-              -maxdepth 1 \
-              -mindepth 1 \
-              -type d \
-              -print \
-              2>/dev/null \
-              || true
-
-
-            echo
-            echo "NDK :"
-
-            find "${ANDROID_SDK_ROOT_PATH}/ndk" \
-              -maxdepth 2 \
-              -type f \
-              -name "source.properties" \
-              -print \
-              2>/dev/null \
-              || true
-
-          else
-
-            echo
-            echo "Le SDK Android n'existe plus."
-
-          fi
-
+          echo "Java :"
+          java -version
 
           echo
           echo "Buildozer :"
-
-          buildozer --version \
-            2>&1 \
-            || true
-
+          buildozer --version
 
           echo
-          echo "buildozer.spec :"
+          echo "Cython :"
+          cython --version
 
-          if [ -f buildozer.spec ]; then
+          echo
+          echo "ANDROID_HOME :"
+          echo "${ANDROID_HOME:-non défini}"
 
-            cat buildozer.spec
+          echo
+          echo "ANDROID_SDK_ROOT :"
+          echo "${ANDROID_SDK_ROOT:-non défini}"
+
+          echo
+          echo "ANDROID_NDK_HOME :"
+          echo "${ANDROID_NDK_HOME:-non défini}"
+
+          echo
+          echo "sdkmanager moderne :"
+
+          SDKMANAGER="${ANDROID_SDK_ROOT_PATH}/cmdline-tools/latest/bin/sdkmanager"
+
+          if [ -x "${SDKMANAGER}" ]; then
+            "${SDKMANAGER}" --version
+          else
+            echo "sdkmanager introuvable."
+          fi
+
+          echo
+          echo "Structure du SDK Android :"
+
+          find "${ANDROID_SDK_ROOT_PATH}" \
+            -maxdepth 4 \
+            -type d \
+            | sort \
+            | head -300
+
+          echo
+          echo "Fichiers sdkmanager présents :"
+
+          find "${ANDROID_SDK_ROOT_PATH}" \
+            -type f \
+            -name "sdkmanager" \
+            -print
+
+          echo
+          echo "Ancien chemin tools/bin :"
+
+          if [ -e \
+            "${ANDROID_SDK_ROOT_PATH}/tools/bin/sdkmanager" \
+          ]; then
+
+            echo "ATTENTION : ancien sdkmanager présent :"
+            echo "${ANDROID_SDK_ROOT_PATH}/tools/bin/sdkmanager"
 
           else
 
-            echo "buildozer.spec introuvable."
+            echo "Ancien sdkmanager absent."
 
           fi
 
+          echo
+          echo "Configuration Android de buildozer.spec :"
+
+          grep -nE \
+            '^\[app\]|android\.' \
+            buildozer.spec \
+            || true
 
           echo
-          echo "Contenu de bin/ :"
+          echo "Derniers éléments du dossier .buildozer :"
 
-          find bin \
-            -maxdepth 2 \
+          find .buildozer \
+            -maxdepth 4 \
             -type f \
-            -print \
             2>/dev/null \
+            | head -200 \
             || true
-
-
-          echo
-          echo "Contenu de .buildozer/android/platform/ :"
-
-          find .buildozer/android/platform \
-            -maxdepth 3 \
-            -type d \
-            -print \
-            2>/dev/null \
-            | head -100 \
-            || true
-
 
           echo
           echo "================================================"
