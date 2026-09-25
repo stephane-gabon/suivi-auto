@@ -15,7 +15,7 @@ orientation = portrait
 
 fullscreen = 0
 
-p4a.local_recipes = p4a-recipes
+
 
 [buildozer]
 
