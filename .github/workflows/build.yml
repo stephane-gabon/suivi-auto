@@ -833,8 +833,24 @@ jobs:
       # 13 - VÉRIFICATION DE BUILDOZER.SPEC
       # ==========================================================
       #
-      # Cette étape permet de détecter immédiatement un ancien
-      # [app:android] ou une mauvaise configuration du SDK.
+      # Cette étape vérifie que les principaux paramètres Android
+      # sont présents dans buildozer.spec.
+      #
+      # IMPORTANT :
+      # On évite ici les expressions régulières trop strictes.
+      #
+      # Un fichier INI peut contenir :
+      #
+      #   android.skip_update = 1
+      #
+      # ou :
+      #
+      #   android.skip_update = true
+      #
+      # ou encore des espaces supplémentaires.
+      #
+      # Le contrôle vérifie donc la présence et la valeur logique
+      # du paramètre sans dépendre exactement de la mise en forme.
       # ==========================================================
 
       - name: "13 - Vérifier buildozer.spec"
@@ -846,123 +862,268 @@ jobs:
           echo "VÉRIFICATION BUILDOZER.SPEC"
           echo "================================================"
 
+          # ------------------------------------------------------
+          # Vérification de l'existence du fichier.
+          # ------------------------------------------------------
+
           if [ ! -f buildozer.spec ]; then
             echo
             echo "ERREUR : buildozer.spec est introuvable."
-
             exit 1
           fi
+
+
+          # ------------------------------------------------------
+          # Affichage de la configuration Android.
+          # ------------------------------------------------------
 
           echo
           echo "Configuration Android détectée :"
 
           grep -nE \
-            "^\[app\]|^android\.api|^android\.minapi|^android\.sdk_build_tools|^android\.ndk|^android\.sdk_path|^android\.skip_update|^android\.archs" \
+            '^\[app\]|^android\.(api|minapi|sdk_build_tools|ndk|sdk_path|skip_update|archs)[[:space:]]*=' \
             buildozer.spec \
             || true
 
 
           # ------------------------------------------------------
-          # Vérification que les paramètres sont dans [app].
+          # Vérification de la section [app].
           # ------------------------------------------------------
 
-          if ! grep -qE '^android\.sdk_path[[:space:]]*=' buildozer.spec; then
+          if ! grep -qE '^\[app\][[:space:]]*$' buildozer.spec; then
             echo
-            echo "ERREUR : android.sdk_path est absent."
-
-            exit 1
-          fi
-
-
-          if ! grep -qE '^android\.skip_update[[:space:]]*=' buildozer.spec; then
-            echo
-            echo "ERREUR : android.skip_update est absent."
-
+            echo "ERREUR : la section [app] est absente."
             exit 1
           fi
 
 
           # ------------------------------------------------------
           # Vérification d'une ancienne section [app:android].
+          #
+          # Les paramètres Android doivent être directement
+          # définis dans [app].
           # ------------------------------------------------------
 
-          if grep -qE '^\[app:android\]' buildozer.spec; then
+          if grep -qE '^\[app:android\][[:space:]]*$' buildozer.spec; then
             echo
             echo "ERREUR : une section [app:android] existe encore."
-
             echo
-            echo "Les paramètres Android doivent être directement"
-            echo "dans la section [app]."
-
+            echo "Les paramètres Android doivent être placés"
+            echo "directement dans [app]."
             exit 1
           fi
 
 
           # ------------------------------------------------------
-          # Vérification du chemin SDK.
+          # Fonction de vérification d'une propriété.
+          #
+          # On recherche la clé indépendamment du nombre d'espaces.
           # ------------------------------------------------------
 
-          if ! grep -qE '^android\.sdk_path[[:space:]]*=[[:space:]]*\.android-sdk[[:space:]]*$' buildozer.spec; then
-            echo
-            echo "ERREUR : android.sdk_path doit pointer vers"
-            echo ".android-sdk"
+          check_property() {
+            local property="$1"
 
-            exit 1
-          fi
-
-
-          # ------------------------------------------------------
-          # Vérification du désactivation des mises à jour SDK.
-          # ------------------------------------------------------
-
-          if ! grep -qE '^android\.skip_update[[:space:]]*=[[:space:]]*(1|true|True)$' buildozer.spec; then
-            echo
-            echo "ERREUR : android.skip_update doit être activé."
-
-            exit 1
-          fi
+            if ! grep -qE "^[[:space:]]*${property}[[:space:]]*=" buildozer.spec; then
+              echo
+              echo "ERREUR : propriété absente : ${property}"
+              exit 1
+            fi
+          }
 
 
           # ------------------------------------------------------
-          # Vérification Build Tools.
+          # Vérification des propriétés obligatoires.
           # ------------------------------------------------------
 
-          if ! grep -qE '^android\.sdk_build_tools[[:space:]]*=[[:space:]]*34\.0\.0[[:space:]]*$' buildozer.spec; then
-            echo
-            echo "ERREUR : Build Tools 34.0.0 ne sont pas"
-            echo "correctement configurés."
+          check_property "android.api"
 
-            exit 1
-          fi
+          check_property "android.minapi"
+
+          check_property "android.sdk_build_tools"
+
+          check_property "android.ndk"
+
+          check_property "android.sdk_path"
+
+          check_property "android.skip_update"
+
+          check_property "android.archs"
 
 
           # ------------------------------------------------------
-          # Vérification API Android.
+          # Vérification des valeurs importantes.
+          #
+          # On extrait la valeur située après le "=" puis on
+          # supprime les espaces.
           # ------------------------------------------------------
 
-          if ! grep -qE '^android\.api[[:space:]]*=[[:space:]]*33[[:space:]]*$' buildozer.spec; then
+          get_property() {
+            local property="$1"
+
+            awk -F'=' -v key="${property}" '
+              $1 ~ "^[[:space:]]*" key "[[:space:]]*$" {
+                value=$2
+
+                # Supprimer les espaces au début.
+                sub(/^[[:space:]]+/, "", value)
+
+                # Supprimer les espaces à la fin.
+                sub(/[[:space:]]+$/, "", value)
+
+                print value
+                exit
+              }
+            ' buildozer.spec
+          }
+
+
+          # ------------------------------------------------------
+          # API Android.
+          # ------------------------------------------------------
+
+          ANDROID_API_VALUE="$(get_property "android.api")"
+
+          if [ "${ANDROID_API_VALUE}" != "33" ]; then
             echo
             echo "ERREUR : android.api doit être 33."
-
+            echo "Valeur détectée : ${ANDROID_API_VALUE}"
             exit 1
           fi
 
 
           # ------------------------------------------------------
-          # Vérification API minimale.
+          # API minimale.
           # ------------------------------------------------------
 
-          if ! grep -qE '^android\.minapi[[:space:]]*=[[:space:]]*24[[:space:]]*$' buildozer.spec; then
+          ANDROID_MIN_API_VALUE="$(get_property "android.minapi")"
+
+          if [ "${ANDROID_MIN_API_VALUE}" != "24" ]; then
             echo
             echo "ERREUR : android.minapi doit être 24."
-
+            echo "Valeur détectée : ${ANDROID_MIN_API_VALUE}"
             exit 1
           fi
 
+
+          # ------------------------------------------------------
+          # Build Tools.
+          # ------------------------------------------------------
+
+          ANDROID_BUILD_TOOLS_VALUE="$(get_property "android.sdk_build_tools")"
+
+          if [ "${ANDROID_BUILD_TOOLS_VALUE}" != "34.0.0" ]; then
+            echo
+            echo "ERREUR : android.sdk_build_tools doit être 34.0.0."
+            echo "Valeur détectée : ${ANDROID_BUILD_TOOLS_VALUE}"
+            exit 1
+          fi
+
+
+          # ------------------------------------------------------
+          # NDK.
+          # ------------------------------------------------------
+
+          ANDROID_NDK_VALUE="$(get_property "android.ndk")"
+
+          if [ "${ANDROID_NDK_VALUE}" != "28c" ]; then
+            echo
+            echo "ERREUR : android.ndk doit être 28c."
+            echo "Valeur détectée : ${ANDROID_NDK_VALUE}"
+            exit 1
+          fi
+
+
+          # ------------------------------------------------------
+          # Chemin du SDK.
+          # ------------------------------------------------------
+
+          ANDROID_SDK_PATH_VALUE="$(get_property "android.sdk_path")"
+
+          if [ "${ANDROID_SDK_PATH_VALUE}" != ".android-sdk" ]; then
+            echo
+            echo "ERREUR : android.sdk_path doit être .android-sdk."
+            echo "Valeur détectée : ${ANDROID_SDK_PATH_VALUE}"
+            exit 1
+          fi
+
+
+          # ------------------------------------------------------
+          # android.skip_update.
+          #
+          # Buildozer accepte une valeur booléenne.
+          #
+          # Nous acceptons donc :
+          #
+          #   1
+          #   true
+          #   True
+          #   TRUE
+          #   yes
+          #
+          # afin de ne pas bloquer le workflow à cause de la
+          # représentation choisie dans le fichier INI.
+          # ------------------------------------------------------
+
+          ANDROID_SKIP_UPDATE_VALUE="$(get_property "android.skip_update")"
+
+          case "${ANDROID_SKIP_UPDATE_VALUE,,}" in
+            1|true|yes|on)
+              echo
+              echo "android.skip_update = ${ANDROID_SKIP_UPDATE_VALUE}"
+              echo "Valeur activée : OK"
+              ;;
+
+            *)
+              echo
+              echo "ERREUR : android.skip_update doit être activé."
+              echo "Valeur détectée : ${ANDROID_SKIP_UPDATE_VALUE}"
+              echo
+              echo "Valeurs acceptées : 1, true, yes ou on."
+              exit 1
+              ;;
+          esac
+
+
+          # ------------------------------------------------------
+          # Architecture.
+          # ------------------------------------------------------
+
+          ANDROID_ARCHS_VALUE="$(get_property "android.archs")"
+
+          if [[ "${ANDROID_ARCHS_VALUE}" != *"arm64-v8a"* ]]; then
+            echo
+            echo "ERREUR : arm64-v8a est absent de android.archs."
+            echo "Valeur détectée : ${ANDROID_ARCHS_VALUE}"
+            exit 1
+          fi
+
+          if [[ "${ANDROID_ARCHS_VALUE}" != *"armeabi-v7a"* ]]; then
+            echo
+            echo "ERREUR : armeabi-v7a est absent de android.archs."
+            echo "Valeur détectée : ${ANDROID_ARCHS_VALUE}"
+            exit 1
+          fi
+
+
+          # ------------------------------------------------------
+          # Résumé.
+          # ------------------------------------------------------
 
           echo
           echo "================================================"
-          echo "BUILDOZER.SPEC : CONFIGURATION VALIDE"
+          echo "CONFIGURATION BUILDOZER.SPEC : VALIDE"
+          echo "================================================"
+
+          echo
+          echo "API Android       : ${ANDROID_API_VALUE}"
+          echo "API minimale      : ${ANDROID_MIN_API_VALUE}"
+          echo "Build Tools       : ${ANDROID_BUILD_TOOLS_VALUE}"
+          echo "NDK               : ${ANDROID_NDK_VALUE}"
+          echo "SDK               : ${ANDROID_SDK_PATH_VALUE}"
+          echo "Skip update       : ${ANDROID_SKIP_UPDATE_VALUE}"
+          echo "Architectures     : ${ANDROID_ARCHS_VALUE}"
+
+          echo
           echo "================================================"
 
 
