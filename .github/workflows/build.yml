@@ -144,6 +144,35 @@ jobs:
       # ========================================================
       # 4 - INSTALLER LES DÉPENDANCES SYSTÈME
       # ========================================================
+      #
+      # Ces paquets sont nécessaires à Buildozer et aux recettes
+      # natives compilées par python-for-android.
+      #
+      # IMPORTANT :
+      #
+      # Certaines recettes p4a utilisent autotools/autoreconf.
+      #
+      # La recette liblzma, notamment, exécute :
+      #
+      #   autoreconf -vif
+      #
+      # qui peut appeler :
+      #
+      #   autopoint
+      #
+      # "autopoint" n'est pas garanti d'être présent simplement
+      # parce que autoconf est installé.
+      #
+      # Nous installons donc explicitement :
+      #
+      #   autopoint
+      #   gettext
+      #
+      # afin d'éviter :
+      #
+      #   Can't exec "autopoint"
+      #   No such file or directory
+      # ========================================================
 
       - name: "4 - Installer les dépendances système"
         shell: bash
@@ -151,10 +180,22 @@ jobs:
 
           set -euo pipefail
 
-          # Mise à jour des dépôts Ubuntu.
+          echo
+          echo "================================================"
+          echo "INSTALLATION DES DÉPENDANCES SYSTÈME"
+          echo "================================================"
+
+          # Mise à jour de la liste des paquets Ubuntu.
           sudo apt-get update
 
-          # Outils nécessaires à la compilation Android.
+          # Installation des outils nécessaires à :
+          #
+          #   - Buildozer
+          #   - python-for-android
+          #   - autotools
+          #   - compilation C/C++
+          #   - recettes natives Android
+          #
           sudo apt-get install -y \
             git \
             zip \
@@ -163,7 +204,10 @@ jobs:
             curl \
             autoconf \
             automake \
+            autopoint \
+            gettext \
             libtool \
+            libltdl-dev \
             pkg-config \
             zlib1g-dev \
             libncurses5-dev \
@@ -173,6 +217,41 @@ jobs:
             libssl-dev \
             build-essential \
             ccache
+
+          echo
+          echo "================================================"
+          echo "VÉRIFICATION DES OUTILS AUTOTOOLS"
+          echo "================================================"
+
+          # Vérification de autoconf.
+          echo
+          echo "autoconf :"
+          autoconf --version | head -n 1
+
+          # Vérification de automake.
+          echo
+          echo "automake :"
+          automake --version | head -n 1
+
+          # Vérification de autopoint.
+          echo
+          echo "autopoint :"
+          autopoint --version | head -n 1
+
+          # Vérification de gettext.
+          echo
+          echo "gettext :"
+          gettext --version | head -n 1
+
+          # Vérification de libtool.
+          echo
+          echo "libtool :"
+          libtool --version | head -n 1
+
+          echo
+          echo "================================================"
+          echo "DÉPENDANCES SYSTÈME : OK"
+          echo "================================================"
 
 
       # ========================================================
