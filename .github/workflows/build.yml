@@ -490,7 +490,42 @@ jobs:
           rm -rf bin
 
           mkdir -p build_logs
+    
+      
+      
+      - name: Prepare local ReportLab package
+        shell: bash
+        run: |
+          set -euxo pipefail
 
+          ARCHIVE="$GITHUB_WORKSPACE/p4a-recipes/reportlab/reportlab-fe660f227cac.tar.gz"
+
+          echo "=========================================="
+          echo "Préparation de ReportLab"
+          echo "=========================================="
+
+          test -f "$ARCHIVE"
+
+          echo "Archive source :"
+          ls -lh "$ARCHIVE"
+
+          echo
+          echo "Recherche du répertoire packages de p4a..."
+
+          mkdir -p \
+            "$GITHUB_WORKSPACE/.buildozer/android/platform/build-arm64-v8a_armeabi-v7a/packages/reportlab"
+
+          cp -f \
+            "$ARCHIVE" \
+            "$GITHUB_WORKSPACE/.buildozer/android/platform/build-arm64-v8a_armeabi-v7a/packages/reportlab/reportlab-fe660f227cac.tar.gz"
+
+          echo
+          echo "Archive copiée :"
+
+          ls -lh \
+            "$GITHUB_WORKSPACE/.buildozer/android/platform/build-arm64-v8a_armeabi-v7a/packages/reportlab/reportlab-fe660f227cac.tar.gz"
+
+      
       # ============================================================
       # 15. Build APK
       # ============================================================
