@@ -1,121 +1,203 @@
-# ======================================================================
+# ================================================================
 # WORKFLOW GITHUB ACTIONS - SUIVI AUTO
-# ======================================================================
+# ================================================================
 #
-# Construction automatique de l'application Kivy "Suivi Auto"
-# pour Android avec :
+# Ce workflow compile l'application Kivy "Suivi Auto" pour Android
+# avec Buildozer / python-for-android.
 #
-#   - Python 3.10
-#   - Java 17 / Temurin
-#   - Buildozer 1.6.0
-#   - python-for-android
-#   - Android API 33
-#   - Android Build Tools 34.0.0
-#   - Android NDK 28c
-#   - Architectures arm64-v8a et armeabi-v7a
+# ENVIRONNEMENT CIBLE
+# -------------------
 #
-# Le workflow :
+#   Système        : Ubuntu 22.04
+#   Python runner  : Python 3.10
+#   Python Android : Python 3.10.11
+#   Host Python    : Python 3.10.11
+#   Java            : Temurin 17
+#   Buildozer       : 1.6.0
+#   Cython          : 0.29.37
+#   Android API     : 33
+#   Android min API : 24
+#   Build Tools     : 34.0.0
+#   Android NDK     : 28c
+#   NDK package     : 28.2.13676358
 #
-#   1. prépare Ubuntu ;
-#   2. installe les dépendances système nécessaires à Buildozer ;
-#   3. installe Python 3.10 ;
-#   4. installe Java 17 ;
-#   5. installe Buildozer ;
-#   6. installe le SDK Android dans .android-sdk ;
-#   7. accepte les licences Android ;
-#   8. installe API 33, Build Tools 34.0.0 et NDK 28.2.13676358 ;
-#   9. fournit un wrapper sdkmanager compatible avec Buildozer 1.6.0 ;
-#  10. vérifie buildozer.spec ;
-#  11. vérifie l'absence de ReportLab actif ;
-#  12. précharge xz-5.2.4.tar.gz dans le cache de python-for-android ;
-#  13. construit l'APK ;
-#  14. conserve le journal complet en cas d'échec ;
-#  15. publie l'APK comme artefact GitHub Actions.
+# ARCHITECTURES
+# -------------
 #
-# IMPORTANT :
-# Le fichier buildozer.spec doit contenir notamment :
+#   arm64-v8a
+#   armeabi-v7a
 #
-#   android.api = 33
-#   android.minapi = 24
-#   android.sdk_build_tools = 34.0.0
-#   android.ndk = 28c
-#   android.sdk_path = .android-sdk
-#   android.archs = arm64-v8a,armeabi-v7a
-#   android.skip_update = 1
+# DÉPENDANCES PYTHON DE L'APPLICATION
+# ------------------------------------
 #
-# ReportLab n'est volontairement plus utilisé dans l'application.
-# ======================================================================
+#   kivy
+#   plyer
+#   openpyxl
+#
+# Pandas a été supprimé.
+# ReportLab a été supprimé.
+#
+# IMPORTANT
+# ---------
+#
+# Le Python du runner GitHub et le Python utilisé par
+# python-for-android sont deux choses différentes.
+#
+# Le runner utilise Python 3.10 afin d'exécuter Buildozer.
+#
+# Dans buildozer.spec, python-for-android reçoit explicitement :
+#
+#   python3==3.10.11
+#   hostpython3==3.10.11
+#
+# Les deux versions doivent être identiques.
+#
+# ================================================================
 
 
-name: Construire APK Android - Suivi Auto
+name: "Build Android - Suivi Auto"
 
 
-# ======================================================================
+# ================================================================
 # DÉCLENCHEMENT DU WORKFLOW
-# ======================================================================
+# ================================================================
 #
 # Le workflow est lancé :
 #
-#   - automatiquement lors d'un push sur main ;
-#   - automatiquement lors d'une Pull Request vers main ;
-#   - manuellement depuis l'onglet Actions de GitHub.
-# ======================================================================
+#   - lors d'un push sur main ;
+#   - lors d'une Pull Request vers main ;
+#   - manuellement depuis GitHub Actions.
+#
+# ================================================================
 
 on:
+
+  # Compilation automatique après chaque push sur main.
   push:
     branches:
       - main
 
+  # Vérification automatique des Pull Requests.
   pull_request:
     branches:
       - main
 
+  # Permet de lancer manuellement le workflow depuis GitHub.
   workflow_dispatch:
 
 
-# ======================================================================
-# PERMISSIONS GITHUB
-# ======================================================================
+# ================================================================
+# PERMISSIONS
+# ================================================================
 #
-# Le workflow doit pouvoir lire le dépôt et publier les artefacts.
-# ======================================================================
+# Le workflow n'a besoin que de lire le dépôt.
+#
+# ================================================================
 
 permissions:
   contents: read
 
 
-# ======================================================================
+# ================================================================
+# VARIABLES GLOBALES
+# ================================================================
+#
+# Ces variables permettent d'éviter de répéter les chemins
+# Android SDK dans toutes les étapes.
+#
+# ================================================================
+
+env:
+
+  # Répertoire du SDK Android utilisé par Buildozer.
+  ANDROID_HOME: ${{ github.workspace }}/.android-sdk
+
+  # Certaines versions d'outils Android utilisent encore
+  # ANDROID_SDK_ROOT.
+  ANDROID_SDK_ROOT: ${{ github.workspace }}/.android-sdk
+
+  # Version des Android Command Line Tools.
+  CMDLINE_TOOLS_VERSION: "11076708"
+
+  # Version de l'Android API utilisée pour compiler.
+  ANDROID_API: "33"
+
+  # Version minimale Android supportée par l'application.
+  ANDROID_MIN_API: "24"
+
+  # Version des Android Build Tools.
+  ANDROID_BUILD_TOOLS: "34.0.0"
+
+  # Version du NDK utilisée par le projet.
+  #
+  # Buildozer attend ici le nom logique :
+  #
+  #   28c
+  #
+  # tandis que sdkmanager installe le package :
+  #
+  #   ndk;28.2.13676358
+  #
+  ANDROID_NDK: "28c"
+
+  # Version exacte du package NDK installé avec sdkmanager.
+  ANDROID_NDK_PACKAGE: "28.2.13676358"
+
+  # Architectures Android compilées.
+  ANDROID_ARCHS: "arm64-v8a,armeabi-v7a"
+
+
+# ================================================================
 # JOB PRINCIPAL
-# ======================================================================
+# ================================================================
 
 jobs:
 
   build-android:
 
-    # Ubuntu 22.04 est utilisé pour conserver un environnement stable
-    # et compatible avec Buildozer / python-for-android.
+    # Ubuntu 22.04 est utilisé volontairement pour conserver
+    # un environnement stable et compatible avec la chaîne
+    # Buildozer / python-for-android.
     runs-on: ubuntu-22.04
 
 
+    # ============================================================
+    # ÉTAPES DU JOB
+    # ============================================================
+
     steps:
 
-      # ================================================================
-      # ÉTAPE 1 - RÉCUPÉRATION DU CODE SOURCE
-      # ================================================================
 
-      - name: "01 - Récupérer le dépôt"
+      # ==========================================================
+      # ÉTAPE 01 - RÉCUPÉRER LE CODE SOURCE
+      # ==========================================================
+      #
+      # Cette étape récupère le dépôt GitHub dans le runner.
+      #
+      # ==========================================================
+
+      - name: "01 - Récupérer le code source"
         uses: actions/checkout@v4
 
 
-      # ================================================================
-      # ÉTAPE 2 - INSTALLATION DE PYTHON
-      # ================================================================
+      # ==========================================================
+      # ÉTAPE 02 - INSTALLER PYTHON 3.10
+      # ==========================================================
       #
-      # Le projet utilise Python 3.10.
+      # Ce Python sert principalement à exécuter Buildozer et
+      # les outils Python utilisés par le workflow.
       #
-      # Le cache pip n'est volontairement pas utilisé ici afin de
-      # réduire les problèmes liés aux caches GitHub Actions périmés.
-      # ================================================================
+      # ATTENTION :
+      #
+      # Cette version du runner n'impose PAS à elle seule la
+      # version Python embarquée dans Android.
+      #
+      # La version Android sera imposée dans buildozer.spec avec :
+      #
+      #   python3==3.10.11
+      #   hostpython3==3.10.11
+      #
+      # ==========================================================
 
       - name: "02 - Installer Python 3.10"
         uses: actions/setup-python@v5
@@ -123,63 +205,56 @@ jobs:
           python-version: "3.10"
 
 
-      # ================================================================
-      # ÉTAPE 3 - INSTALLATION DE JAVA 17
-      # ================================================================
+      # ==========================================================
+      # ÉTAPE 03 - INSTALLER JAVA 17
+      # ==========================================================
       #
-      # Android / Gradle / Buildozer utilisent Java 17.
+      # Java 17 est utilisé par la chaîne Android/Gradle.
       #
-      # setup-java@v5 est utilisé au lieu de versions anciennes de
-      # l'action.
-      # ================================================================
+      # Temurin est utilisé comme distribution OpenJDK.
+      #
+      # Le cache Gradle n'est volontairement pas activé ici afin
+      # de privilégier la reproductibilité du build.
+      #
+      # ==========================================================
 
       - name: "03 - Installer Java 17"
         uses: actions/setup-java@v5
         with:
-          distribution: temurin
+          distribution: "temurin"
           java-version: "17"
 
 
-      # ================================================================
-      # ÉTAPE 4 - DÉPENDANCES LINUX
-      # ================================================================
+      # ==========================================================
+      # ÉTAPE 04 - INSTALLER LES DÉPENDANCES SYSTÈME
+      # ==========================================================
       #
-      # Ces paquets sont nécessaires aux recettes utilisées par
-      # python-for-android.
+      # Ces paquets sont nécessaires à différentes étapes de la
+      # compilation de python-for-android et de ses dépendances.
       #
-      # En particulier :
+      # autopoint et libtool sont notamment nécessaires à certains
+      # composants utilisant Autotools.
       #
-      #   autoconf
-      #   automake
-      #   autopoint
-      #   gettext
-      #   libtool
-      #   libtool-bin
-      #   libltdl-dev
-      #
-      # sont nécessaires pour certaines bibliothèques compilées
-      # pendant la construction Android.
-      #
-      # autopoint avait précédemment provoqué l'erreur :
-      #
-      #   Can't exec "autopoint"
-      #
-      # Le paquet est donc explicitement installé.
-      #
-      # IMPORTANT :
-      # Les commandes de vérification n'utilisent pas "head -n 1".
-      # Cela évite les erreurs "Broken pipe" avec certains outils
-      # comme libtool.
-      # ================================================================
+      # ==========================================================
 
-      - name: "04 - Installer les dépendances Linux"
+      - name: "04 - Installer les dépendances système"
         shell: bash
         run: |
           set -e
 
+          echo ""
+          echo "============================================================"
+          echo "MISE À JOUR DES DÉPÔTS APT"
+          echo "============================================================"
+
           sudo apt-get update
 
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+          echo ""
+          echo "============================================================"
+          echo "INSTALLATION DES OUTILS SYSTÈME"
+          echo "============================================================"
+
+          sudo apt-get install -y \
             git \
             zip \
             unzip \
@@ -204,49 +279,82 @@ jobs:
 
           echo ""
           echo "============================================================"
-          echo "VÉRIFICATION DES OUTILS AUTOTOOLS"
+          echo "VÉRIFICATION DES OUTILS PRINCIPAUX"
           echo "============================================================"
 
-          command -v autoconf
-          autoconf --version
-
-          command -v automake
-          automake --version
-
-          command -v autopoint
-          autopoint --version
-
-          command -v gettext
-          gettext --version
-
-          command -v libtool
+          git --version
+          zip -v | head -n 2
+          unzip -v | head -n 2
+          wget --version | head -n 1
+          curl --version | head -n 1
+          autoconf --version | head -n 1
+          automake --version | head -n 1
+          autopoint --version | head -n 1
           libtool --version
-
-          command -v libtoolize
-          libtoolize --version
-
-          echo ""
-          echo "============================================================"
-          echo "DÉPENDANCES LINUX OK"
-          echo "============================================================"
+          cmake --version | head -n 1
 
 
-      # ================================================================
-      # ÉTAPE 5 - INSTALLATION DE BUILDOZER
-      # ================================================================
+      # ==========================================================
+      # ÉTAPE 05 - VÉRIFIER PYTHON ET INSTALLER BUILDOZER
+      # ==========================================================
       #
-      # Buildozer 1.6.0 est utilisé explicitement afin de conserver
-      # un environnement reproductible.
+      # Cette étape vérifie que le runner utilise bien Python 3.10.
       #
-      # Cython est également installé explicitement.
-      # ================================================================
+      # Puis elle installe :
+      #
+      #   Buildozer 1.6.0
+      #   Cython 0.29.37
+      #
+      # La version exacte Python Android est définie séparément
+      # dans buildozer.spec.
+      #
+      # ==========================================================
 
-      - name: "05 - Installer Buildozer et Cython"
+      - name: "05 - Vérifier Python et installer Buildozer"
         shell: bash
         run: |
           set -e
 
-          python -m pip install --upgrade pip setuptools wheel
+          echo ""
+          echo "============================================================"
+          echo "PYTHON DU RUNNER"
+          echo "============================================================"
+
+          python --version
+          python3 --version
+
+          echo ""
+          echo "Emplacement de Python :"
+
+          command -v python
+          command -v python3
+
+          echo ""
+          echo "Version Python détaillée :"
+
+          python - <<'PY'
+          import sys
+
+          print("Version :", sys.version)
+          print("Exécutable :", sys.executable)
+
+          if sys.version_info[:2] != (3, 10):
+              raise SystemExit(
+                  "ERREUR : le runner doit utiliser Python 3.10."
+              )
+
+          print("OK : le runner utilise Python 3.10.")
+          PY
+
+          echo ""
+          echo "============================================================"
+          echo "INSTALLATION DE BUILDOZER ET CYTHON"
+          echo "============================================================"
+
+          python -m pip install --upgrade \
+            pip \
+            setuptools \
+            wheel
 
           python -m pip install \
             "buildozer==1.6.0" \
@@ -254,676 +362,410 @@ jobs:
 
           echo ""
           echo "============================================================"
-          echo "VERSIONS PYTHON / BUILDOZER / CYTHON"
+          echo "VERSIONS INSTALLÉES"
           echo "============================================================"
 
           python --version
-          pip --version
+          python -m pip --version
           buildozer --version
           cython --version
 
 
-      # ================================================================
-      # ÉTAPE 6 - DÉFINIR L'ANDROID SDK
-      # ================================================================
+      # ==========================================================
+      # ÉTAPE 06 - PRÉPARER LE RÉPERTOIRE ANDROID SDK
+      # ==========================================================
       #
-      # Le SDK Android est installé dans :
+      # Le SDK est installé dans le dépôt de travail :
       #
       #   .android-sdk
       #
-      # à l'intérieur du dépôt.
+      # Cela permet à Buildozer d'utiliser explicitement ce SDK
+      # plutôt qu'un SDK éventuellement présent dans le runner.
       #
-      # Cela permet à buildozer.spec de pointer explicitement vers
-      # ce SDK grâce à :
-      #
-      #   android.sdk_path = .android-sdk
-      #
-      # Les variables sont également exportées dans l'environnement
-      # GitHub Actions pour les étapes suivantes.
-      # ================================================================
+      # ==========================================================
 
-      - name: "06 - Configurer les variables Android"
+      - name: "06 - Préparer le répertoire Android SDK"
         shell: bash
         run: |
           set -e
 
           SDK_ROOT="${GITHUB_WORKSPACE}/.android-sdk"
 
+          echo ""
+          echo "============================================================"
+          echo "PRÉPARATION DU SDK ANDROID"
+          echo "============================================================"
+
+          mkdir -p "${SDK_ROOT}"
+
+          echo "SDK Android : ${SDK_ROOT}"
+
+
+      # ==========================================================
+      # ÉTAPE 07 - TÉLÉCHARGER LES ANDROID COMMAND LINE TOOLS
+      # ==========================================================
+      #
+      # Une version précise des Command Line Tools est utilisée
+      # afin d'éviter qu'une modification future de Google ne rende
+      # le workflow non reproductible.
+      #
+      # ==========================================================
+
+      - name: "07 - Installer les Android Command Line Tools"
+        shell: bash
+        run: |
+          set -e
+
+          SDK_ROOT="${GITHUB_WORKSPACE}/.android-sdk"
+          TOOLS_DIR="${SDK_ROOT}/cmdline-tools"
+
+          echo ""
+          echo "============================================================"
+          echo "INSTALLATION DES ANDROID COMMAND LINE TOOLS"
+          echo "============================================================"
+
+          rm -rf "${TOOLS_DIR}"
+          mkdir -p "${TOOLS_DIR}"
+
+          cd "${TOOLS_DIR}"
+
+          wget -q \
+            "https://dl.google.com/android/repository/commandlinetools-linux-${CMDLINE_TOOLS_VERSION}_latest.zip" \
+            -O commandlinetools.zip
+
+          unzip -q commandlinetools.zip
+
+          mkdir -p latest
+
+          mv cmdline-tools/* latest/
+
+          rm -rf cmdline-tools
+          rm -f commandlinetools.zip
+
+          echo ""
+          echo "Command Line Tools installés :"
+
+          ls -la "${TOOLS_DIR}/latest/bin"
+
+
+      # ==========================================================
+      # ÉTAPE 08 - CONFIGURER LE PATH ANDROID
+      # ==========================================================
+      #
+      # Les outils modernes sont situés dans :
+      #
+      #   cmdline-tools/latest/bin
+      #
+      # Le wrapper sdkmanager utilisé plus loin est situé dans :
+      #
+      #   tools/bin
+      #
+      # Le platform-tools est également ajouté au PATH.
+      #
+      # ==========================================================
+
+      - name: "08 - Configurer le PATH Android"
+        shell: bash
+        run: |
+          set -e
+
+          SDK_ROOT="${GITHUB_WORKSPACE}/.android-sdk"
+
+          echo ""
+          echo "============================================================"
+          echo "CONFIGURATION DU PATH ANDROID"
+          echo "============================================================"
+
+          mkdir -p "${SDK_ROOT}/tools/bin"
+
+          {
+            echo "${SDK_ROOT}/platform-tools"
+            echo "${SDK_ROOT}/cmdline-tools/latest/bin"
+            echo "${SDK_ROOT}/tools/bin"
+          } >> "${GITHUB_PATH}"
+
+          echo ""
           echo "ANDROID_HOME=${SDK_ROOT}" >> "${GITHUB_ENV}"
           echo "ANDROID_SDK_ROOT=${SDK_ROOT}" >> "${GITHUB_ENV}"
 
-          echo "ANDROID_HOME=${SDK_ROOT}"
-          echo "ANDROID_SDK_ROOT=${SDK_ROOT}"
+          echo ""
+          echo "PATH Android configuré."
 
 
-      # ================================================================
-      # ÉTAPE 7 - TÉLÉCHARGER ET INSTALLER LE SDK ANDROID
-      # ================================================================
+      # ==========================================================
+      # ÉTAPE 09 - CRÉER LE WRAPPER SDKMANAGER
+      # ==========================================================
       #
-      # On utilise les Android Command-line Tools modernes.
-      #
-      # Le sdkmanager moderne se trouve ensuite ici :
-      #
-      #   .android-sdk/cmdline-tools/latest/bin/sdkmanager
-      #
-      # IMPORTANT :
-      # Buildozer 1.6.0 recherche encore historiquement :
+      # Certaines parties de Buildozer/python-for-android peuvent
+      # encore rechercher le chemin historique :
       #
       #   .android-sdk/tools/bin/sdkmanager
       #
-      # Le wrapper compatible sera créé à l'étape suivante.
-      # ================================================================
-
-      - name: "07 - Installer le SDK Android"
-        shell: bash
-        run: |
-          set -e
-
-          SDK_ROOT="${GITHUB_WORKSPACE}/.android-sdk"
-          CMDLINE_TOOLS_VERSION="11076708"
-
-          rm -rf "${SDK_ROOT}"
-
-          mkdir -p "${SDK_ROOT}/cmdline-tools"
-
-          cd "${RUNNER_TEMP}"
-
-          echo "Téléchargement des Android Command-line Tools..."
-
-          curl \
-            --fail \
-            --location \
-            --retry 10 \
-            --retry-delay 5 \
-            --connect-timeout 30 \
-            --max-time 300 \
-            -o commandlinetools.zip \
-            "https://dl.google.com/android/repository/commandlinetools-linux-${CMDLINE_TOOLS_VERSION}_latest.zip"
-
-          unzip -q commandlinetools.zip -d "${RUNNER_TEMP}/android-cmdline"
-
-          mkdir -p "${SDK_ROOT}/cmdline-tools/latest"
-
-          cp -a \
-            "${RUNNER_TEMP}/android-cmdline/cmdline-tools/." \
-            "${SDK_ROOT}/cmdline-tools/latest/"
-
-          SDKMANAGER="${SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager"
-
-          chmod +x "${SDKMANAGER}"
-
-          echo ""
-          echo "============================================================"
-          echo "SDKMANAGER MODERNE"
-          echo "============================================================"
-
-          "${SDKMANAGER}" --version
-
-          echo ""
-          echo "SDK installé dans :"
-          echo "${SDK_ROOT}"
-
-
-      # ================================================================
-      # ÉTAPE 8 - ACCEPTER LES LICENCES ANDROID
-      # ================================================================
-      #
-      # NE PAS utiliser :
-      #
-      #   yes | sdkmanager --licenses
-      #
-      # car sdkmanager peut fermer le pipe et provoquer :
-      #
-      #   Broken pipe
-      #   SIGPIPE
-      #
-      # On fournit donc un nombre fini de réponses "y".
-      # ================================================================
-
-      - name: "08 - Accepter les licences Android"
-        shell: bash
-        run: |
-          set -e
-
-          SDK_ROOT="${GITHUB_WORKSPACE}/.android-sdk"
-          SDKMANAGER="${SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager"
-
-          mkdir -p "${HOME}/.android"
-
-          LICENSE_INPUT="${RUNNER_TEMP}/android-licenses.txt"
-
-          # Génère un nombre suffisant de réponses "y" sans créer
-          # de pipe infini susceptible de provoquer SIGPIPE.
-          for i in $(seq 1 100); do
-            printf 'y\n'
-          done > "${LICENSE_INPUT}"
-
-          set +e
-
-          LICENSE_OUTPUT=$(
-            "${SDKMANAGER}" --licenses \
-              < "${LICENSE_INPUT}" \
-              2>&1
-          )
-
-          SDKMANAGER_EXIT_CODE=$?
-
-          set -e
-
-          echo "${LICENSE_OUTPUT}"
-
-          # Certaines versions de sdkmanager peuvent retourner un code
-          # non nul après avoir accepté les licences. Nous vérifions donc
-          # aussi la présence effective du répertoire des licences.
-
-          if [ ! -d "${HOME}/.android" ]; then
-            echo "ERREUR : le répertoire Android utilisateur est absent."
-            exit 1
-          fi
-
-          if [ "${SDKMANAGER_EXIT_CODE}" -ne 0 ]; then
-            echo ""
-            echo "AVERTISSEMENT : sdkmanager --licenses a retourné : ${SDKMANAGER_EXIT_CODE}"
-            echo "La présence des licences sera vérifiée par les fichiers."
-          fi
-
-          echo ""
-          echo "============================================================"
-          echo "LICENCES ANDROID"
-          echo "============================================================"
-
-          find "${SDK_ROOT}/licenses" \
-            -maxdepth 1 \
-            -type f \
-            -print \
-            2>/dev/null || true
-
-
-      # ================================================================
-      # ÉTAPE 9 - INSTALLER LES COMPOSANTS ANDROID
-      # ================================================================
-      #
-      # Versions utilisées :
-      #
-      #   API Android : 33
-      #   Build Tools : 34.0.0
-      #   NDK         : 28.2.13676358
-      #
-      # Le nom "28c" utilisé dans buildozer.spec correspond à la famille
-      # NDK attendue par python-for-android / Buildozer.
-      # ================================================================
-
-      - name: "09 - Installer API Android, Build Tools et NDK"
-        shell: bash
-        run: |
-          set -e
-
-          SDK_ROOT="${GITHUB_WORKSPACE}/.android-sdk"
-          SDKMANAGER="${SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager"
-
-          echo ""
-          echo "============================================================"
-          echo "INSTALLATION DES COMPOSANTS ANDROID"
-          echo "============================================================"
-
-          "${SDKMANAGER}" \
-            --sdk_root="${SDK_ROOT}" \
-            "platform-tools" \
-            "platforms;android-33" \
-            "build-tools;34.0.0" \
-            "ndk;28.2.13676358"
-
-          echo ""
-          echo "============================================================"
-          echo "VÉRIFICATION DES COMPOSANTS"
-          echo "============================================================"
-
-          test -d "${SDK_ROOT}/platform-tools"
-          test -d "${SDK_ROOT}/platforms/android-33"
-          test -d "${SDK_ROOT}/build-tools/34.0.0"
-          test -d "${SDK_ROOT}/ndk/28.2.13676358"
-
-          test -x "${SDK_ROOT}/build-tools/34.0.0/aidl"
-
-          echo "Android API 33       : OK"
-          echo "Build Tools 34.0.0   : OK"
-          echo "NDK 28.2.13676358   : OK"
-          echo "AIDL                 : OK"
-
-
-      # ================================================================
-      # ÉTAPE 10 - COMPATIBILITÉ SDKMANAGER / BUILDOZER 1.6.0
-      # ================================================================
-      #
-      # Buildozer 1.6.0 recherche encore le sdkmanager à :
-      #
-      #   .android-sdk/tools/bin/sdkmanager
-      #
-      # alors que les Android Command-line Tools modernes utilisent :
+      # Les versions modernes du SDK utilisent cependant :
       #
       #   .android-sdk/cmdline-tools/latest/bin/sdkmanager
       #
-      # Nous créons donc un véritable script wrapper.
+      # Le wrapper fait le pont entre les deux chemins.
       #
       # IMPORTANT :
-      # Ce n'est PAS un lien symbolique.
       #
-      # Le wrapper transmet simplement tous les arguments au
-      # sdkmanager moderne.
+      # Depuis tools/bin/sdkmanager :
       #
-      # Depuis :
+      #   ../.. = .android-sdk
       #
-      #   .android-sdk/tools/bin/
+      # et non ../../..
       #
-      # il faut remonter de DEUX niveaux pour retrouver :
-      #
-      #   .android-sdk/
-      # ================================================================
+      # ==========================================================
 
-      - name: "10 - Créer le wrapper sdkmanager pour Buildozer 1.6.0"
+      - name: "09 - Créer le wrapper sdkmanager"
         shell: bash
         run: |
           set -e
 
           SDK_ROOT="${GITHUB_WORKSPACE}/.android-sdk"
-
-          MODERN_SDKMANAGER="${SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager"
-          LEGACY_DIR="${SDK_ROOT}/tools/bin"
-          LEGACY_SDKMANAGER="${LEGACY_DIR}/sdkmanager"
+          SCRIPT_DIR="${SDK_ROOT}/tools/bin"
 
           echo ""
           echo "============================================================"
           echo "CRÉATION DU WRAPPER SDKMANAGER"
           echo "============================================================"
 
-          echo "SDK_ROOT :"
-          echo "${SDK_ROOT}"
+          mkdir -p "${SCRIPT_DIR}"
 
-          echo ""
-          echo "SDKMANAGER moderne :"
-          echo "${MODERN_SDKMANAGER}"
-
-          # Vérification du sdkmanager moderne.
-          if [ ! -x "${MODERN_SDKMANAGER}" ]; then
-            echo ""
-            echo "ERREUR : sdkmanager moderne introuvable ou non exécutable."
-            echo "${MODERN_SDKMANAGER}"
-            exit 1
-          fi
-
-          # Création du répertoire attendu historiquement par Buildozer.
-          mkdir -p "${LEGACY_DIR}"
-
-          # Création du wrapper.
-          cat > "${LEGACY_SDKMANAGER}" <<'EOF'
+          cat > "${SCRIPT_DIR}/sdkmanager" <<'EOF'
           #!/usr/bin/env bash
-
-          # ================================================================
-          # Wrapper de compatibilité pour Buildozer 1.6.0.
-          #
-          # Buildozer recherche historiquement :
-          #
-          #   .android-sdk/tools/bin/sdkmanager
-          #
-          # Le véritable sdkmanager moderne est situé ici :
-          #
-          #   .android-sdk/cmdline-tools/latest/bin/sdkmanager
-          #
-          # Le script calcule la racine .android-sdk en remontant :
-          #
-          #   tools/bin -> tools -> .android-sdk
-          #
-          # soit DEUX niveaux.
-          # ================================================================
 
           set -e
 
           SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
           # Depuis :
+          #
           #   .android-sdk/tools/bin
           #
-          # ../.. donne :
+          # deux niveaux vers le haut donnent :
+          #
           #   .android-sdk
           #
           SDK_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
-          MODERN_SDKMANAGER="${SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager"
-
-          # Vérification de sécurité avant exécution.
-          if [ ! -x "${MODERN_SDKMANAGER}" ]; then
-              echo "ERREUR : sdkmanager moderne introuvable :"
-              echo "${MODERN_SDKMANAGER}"
-              exit 1
-          fi
-
-          # Transmet tous les arguments au sdkmanager moderne.
-          exec "${MODERN_SDKMANAGER}" "$@"
+          exec "${SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager" "$@"
           EOF
 
-          chmod +x "${LEGACY_SDKMANAGER}"
+          chmod +x "${SCRIPT_DIR}/sdkmanager"
 
           echo ""
-          echo "============================================================"
-          echo "TEST SDKMANAGER MODERNE"
-          echo "============================================================"
-
-          "${MODERN_SDKMANAGER}" --version
+          echo "Wrapper créé :"
+          ls -l "${SCRIPT_DIR}/sdkmanager"
 
           echo ""
-          echo "============================================================"
-          echo "TEST WRAPPER BUILDOZER"
-          echo "============================================================"
-
-          "${LEGACY_SDKMANAGER}" --version
-
-          echo ""
-          echo "============================================================"
-          echo "VÉRIFICATION DES CHEMINS"
-          echo "============================================================"
-
-          echo "Wrapper :"
-          echo "${LEGACY_SDKMANAGER}"
-
-          echo ""
-          echo "SDK root calculé par le wrapper :"
-          (
-            SCRIPT_DIR="$(cd "$(dirname "${LEGACY_SDKMANAGER}")" && pwd)"
-            cd "${SCRIPT_DIR}/../.."
-            pwd
-          )
-
-          echo ""
-          echo "SDKMANAGER moderne :"
-          echo "${MODERN_SDKMANAGER}"
-
-          echo ""
-          echo "============================================================"
-          echo "SDKMANAGER : COMPATIBILITÉ OK"
-          echo "============================================================"
+          echo "Test du wrapper :"
+          "${SCRIPT_DIR}/sdkmanager" --version
 
 
-      # ================================================================
-      # ÉTAPE 11 - CONFIGURATION DU PATH ANDROID
-      # ================================================================
+      # ==========================================================
+      # ÉTAPE 10 - ACCEPTER LES LICENCES ANDROID
+      # ==========================================================
+      #
+      # Un nombre FINI de réponses "y" est envoyé.
+      #
+      # On évite volontairement :
+      #
+      #   yes | sdkmanager --licenses
+      #
+      # car cette construction peut provoquer un SIGPIPE / Broken
+      # pipe lorsque sdkmanager termine avant "yes".
+      #
+      # ==========================================================
 
-      - name: "11 - Configurer PATH Android"
+      - name: "10 - Accepter les licences Android"
         shell: bash
         run: |
           set -e
 
           SDK_ROOT="${GITHUB_WORKSPACE}/.android-sdk"
 
-          echo "${SDK_ROOT}/platform-tools" >> "${GITHUB_PATH}"
-          echo "${SDK_ROOT}/cmdline-tools/latest/bin" >> "${GITHUB_PATH}"
-          echo "${SDK_ROOT}/tools/bin" >> "${GITHUB_PATH}"
+          echo ""
+          echo "============================================================"
+          echo "ACCEPTATION DES LICENCES ANDROID"
+          echo "============================================================"
 
-          echo "PATH Android configuré."
+          printf 'y\n%.0s' {1..100} \
+            | "${SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager" \
+                --sdk_root="${SDK_ROOT}" \
+                --licenses
+
+          echo ""
+          echo "Licences Android traitées."
 
 
-      # ================================================================
-      # ÉTAPE 12 - VÉRIFIER buildozer.spec
-      # ================================================================
+      # ==========================================================
+      # ÉTAPE 11 - INSTALLER LES COMPOSANTS ANDROID
+      # ==========================================================
       #
-      # Les propriétés Android doivent être dans la section [app].
+      # Installation des composants strictement nécessaires :
+      #
+      #   platform-tools
+      #   Android API 33
+      #   Build Tools 34.0.0
+      #   NDK 28.2.13676358
       #
       # IMPORTANT :
-      # La version précédente de cette étape utilisait une extraction
-      # awk trop fragile et retournait des valeurs vides :
       #
-      #   api              =
-      #   minapi           =
-      #   build tools      =
-      #   ndk              =
+      # Le package SDK du NDK est :
       #
-      # La fonction ci-dessous utilise maintenant :
+      #   ndk;28.2.13676358
       #
-      #   - awk -v pour transmettre le nom de la propriété ;
-      #   - une détection robuste de [app] ;
-      #   - la prise en charge des espaces autour de [app] ;
-      #   - l'arrêt lorsqu'une autre section commence ;
-      #   - l'ignorance des commentaires ;
-      #   - l'extraction uniquement de la valeur située après "=".
+      # tandis que Buildozer utilise :
       #
-      # Cette méthode ne dépend donc plus de l'interpolation complexe
-      # d'une regex shell dans awk.
-      # ================================================================
+      #   android.ndk = 28c
+      #
+      # ==========================================================
 
-      - name: "12 - Vérifier buildozer.spec"
+      - name: "11 - Installer les composants Android"
         shell: bash
         run: |
           set -e
 
-          test -f buildozer.spec
+          SDK_ROOT="${GITHUB_WORKSPACE}/.android-sdk"
 
           echo ""
           echo "============================================================"
-          echo "CONFIGURATION ANDROID DÉTECTÉE"
+          echo "INSTALLATION DES COMPOSANTS ANDROID"
           echo "============================================================"
 
-          echo ""
-          echo "Contenu des propriétés Android dans [app] :"
-          echo "------------------------------------------------------------"
-
-          awk '
-            BEGIN {
-              in_app = 0
-            }
-
-            # Début de la section [app].
-            /^[[:space:]]*\[app\][[:space:]]*$/ {
-              in_app = 1
-              print NR ":" $0
-              next
-            }
-
-            # Une autre section termine [app].
-            /^[[:space:]]*\[[^]]+\][[:space:]]*$/ {
-              if ($0 !~ /^[[:space:]]*\[app\][[:space:]]*$/) {
-                in_app = 0
-              }
-            }
-
-            # Afficher uniquement les propriétés Android demandées.
-            in_app &&
-            $0 !~ /^[[:space:]]*#/ &&
-            $0 ~ /^[[:space:]]*android\.(api|minapi|sdk_build_tools|ndk|sdk_path|archs|skip_update)[[:space:]]*=/ {
-              print NR ":" $0
-            }
-          ' buildozer.spec
-
-          # --------------------------------------------------------
-          # Fonction robuste de lecture d'une propriété dans [app].
-          #
-          # Exemple :
-          #
-          #   get_app_value "android.api"
-          #
-          # retourne :
-          #
-          #   33
-          # --------------------------------------------------------
-
-          get_app_value() {
-            local PROPERTY="$1"
-
-            awk -v property="${PROPERTY}" '
-              BEGIN {
-                in_app = 0
-              }
-
-              # Début de [app].
-              /^[[:space:]]*\[app\][[:space:]]*$/ {
-                in_app = 1
-                next
-              }
-
-              # Toute autre section termine [app].
-              /^[[:space:]]*\[[^]]+\][[:space:]]*$/ {
-                if ($0 !~ /^[[:space:]]*\[app\][[:space:]]*$/) {
-                  in_app = 0
-                }
-                next
-              }
-
-              # Ignorer les commentaires.
-              /^[[:space:]]*#/ {
-                next
-              }
-
-              # Rechercher la propriété demandée.
-              in_app &&
-              $0 ~ "^[[:space:]]*" property "[[:space:]]*=" {
-
-                line = $0
-
-                # Supprimer tout ce qui précède le premier "=".
-                sub(/^[^=]*=/, "", line)
-
-                # Supprimer les espaces en début de valeur.
-                sub(/^[[:space:]]*/, "", line)
-
-                # Supprimer les espaces en fin de valeur.
-                sub(/[[:space:]]*$/, "", line)
-
-                print line
-
-                exit
-              }
-            ' buildozer.spec
-          }
-
-          # --------------------------------------------------------
-          # Lecture des propriétés Android.
-          # --------------------------------------------------------
-
-          API="$(get_app_value "android.api")"
-          MINAPI="$(get_app_value "android.minapi")"
-          BUILD_TOOLS="$(get_app_value "android.sdk_build_tools")"
-          NDK="$(get_app_value "android.ndk")"
-          SDK_PATH="$(get_app_value "android.sdk_path")"
-          ARCHS="$(get_app_value "android.archs")"
-          SKIP_UPDATE="$(get_app_value "android.skip_update")"
+          "${SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager" \
+            --sdk_root="${SDK_ROOT}" \
+            "platform-tools" \
+            "platforms;android-${ANDROID_API}" \
+            "build-tools;${ANDROID_BUILD_TOOLS}" \
+            "ndk;${ANDROID_NDK_PACKAGE}"
 
           echo ""
           echo "============================================================"
-          echo "VALEURS ANDROID LUES DANS BUILDOZER.SPEC"
+          echo "COMPOSANTS ANDROID INSTALLÉS"
           echo "============================================================"
-
-          echo "api              = ${API}"
-          echo "minapi           = ${MINAPI}"
-          echo "build tools      = ${BUILD_TOOLS}"
-          echo "ndk              = ${NDK}"
-          echo "sdk path         = ${SDK_PATH}"
-          echo "architectures    = ${ARCHS}"
-          echo "skip update      = ${SKIP_UPDATE}"
 
           echo ""
-
-          # --------------------------------------------------------
-          # Vérification de android.api.
-          # --------------------------------------------------------
-
-          if [ "${API}" != "33" ]; then
-            echo "ERREUR : android.api doit être 33."
-            echo "Valeur détectée : '${API}'"
-            exit 1
-          fi
-
-          # --------------------------------------------------------
-          # Vérification de android.minapi.
-          # --------------------------------------------------------
-
-          if [ "${MINAPI}" != "24" ]; then
-            echo "ERREUR : android.minapi doit être 24."
-            echo "Valeur détectée : '${MINAPI}'"
-            exit 1
-          fi
-
-          # --------------------------------------------------------
-          # Vérification des Build Tools.
-          # --------------------------------------------------------
-
-          if [ "${BUILD_TOOLS}" != "34.0.0" ]; then
-            echo "ERREUR : android.sdk_build_tools doit être 34.0.0."
-            echo "Valeur détectée : '${BUILD_TOOLS}'"
-            exit 1
-          fi
-
-          # --------------------------------------------------------
-          # Vérification du NDK.
-          # --------------------------------------------------------
-
-          if [ "${NDK}" != "28c" ]; then
-            echo "ERREUR : android.ndk doit être 28c."
-            echo "Valeur détectée : '${NDK}'"
-            exit 1
-          fi
-
-          # --------------------------------------------------------
-          # Vérification du chemin SDK.
-          # --------------------------------------------------------
-
-          if [ "${SDK_PATH}" != ".android-sdk" ]; then
-            echo "ERREUR : android.sdk_path doit être .android-sdk."
-            echo "Valeur détectée : '${SDK_PATH}'"
-            exit 1
-          fi
-
-          # --------------------------------------------------------
-          # Vérification de arm64-v8a.
-          # --------------------------------------------------------
-
-          if [[ ",${ARCHS}," != *",arm64-v8a,"* ]]; then
-            echo "ERREUR : arm64-v8a absent de android.archs."
-            echo "Valeur détectée : '${ARCHS}'"
-            exit 1
-          fi
-
-          # --------------------------------------------------------
-          # Vérification de armeabi-v7a.
-          # --------------------------------------------------------
-
-          if [[ ",${ARCHS}," != *",armeabi-v7a,"* ]]; then
-            echo "ERREUR : armeabi-v7a absent de android.archs."
-            echo "Valeur détectée : '${ARCHS}'"
-            exit 1
-          fi
-
-          # --------------------------------------------------------
-          # Vérification de android.skip_update.
-          #
-          # Plusieurs écritures booléennes sont acceptées.
-          # --------------------------------------------------------
-
-          case "${SKIP_UPDATE,,}" in
-            1|true|yes|on)
-              echo "android.skip_update : activé"
-              ;;
-
-            *)
-              echo "ERREUR : android.skip_update doit être activé."
-              echo "Valeur détectée : '${SKIP_UPDATE}'"
-              exit 1
-              ;;
-          esac
+          echo "Platform Tools :"
+          ls -ld "${SDK_ROOT}/platform-tools"
 
           echo ""
-          echo "============================================================"
-          echo "BUILDOZER.SPEC : CONFIGURATION ANDROID VALIDE"
-          echo "============================================================"
+          echo "Android Platform :"
+          ls -ld "${SDK_ROOT}/platforms/android-${ANDROID_API}"
+
+          echo ""
+          echo "Build Tools :"
+          ls -ld "${SDK_ROOT}/build-tools/${ANDROID_BUILD_TOOLS}"
+
+          echo ""
+          echo "NDK :"
+          ls -ld "${SDK_ROOT}/ndk/${ANDROID_NDK_PACKAGE}"
 
 
-      # ================================================================
-      # ÉTAPE 13 - VÉRIFIER L'ABSENCE DE REPORTLAB
-      # ================================================================
+      # ==========================================================
+      # ÉTAPE 12 - VALIDER BUILDOZER.SPEC
+      # ==========================================================
       #
-      # ReportLab a été supprimé car sa recette locale provoquait des
-      # problèmes de construction.
+      # Cette étape vérifie que les paramètres Android essentiels
+      # sont bien présents dans la section [app].
       #
-      # Les commentaires de documentation peuvent mentionner ReportLab.
-      # On recherche donc uniquement les références actives.
-      # ================================================================
+      # Elle vérifie également le point critique concernant Python :
+      #
+      #   python3==3.10.11
+      #   hostpython3==3.10.11
+      #
+      # Cela permet de détecter immédiatement une régression avant
+      # de lancer une compilation longue.
+      #
+      # ==========================================================
+
+      - name: "12 - Valider buildozer.spec"
+        shell: bash
+        run: |
+          set -e
+
+          echo ""
+          echo "============================================================"
+          echo "VALIDATION DE BUILDOZER.SPEC"
+          echo "============================================================"
+
+          if [ ! -f buildozer.spec ]; then
+            echo "ERREUR : buildozer.spec est absent."
+            exit 1
+          fi
+
+          echo ""
+          echo "Fichier buildozer.spec :"
+          sed -n '1,260p' buildozer.spec
+
+          echo ""
+          echo "============================================================"
+          echo "VÉRIFICATION DES PARAMÈTRES ANDROID"
+          echo "============================================================"
+
+          grep -Eq '^[[:space:]]*android\.api[[:space:]]*=[[:space:]]*33[[:space:]]*$' \
+            buildozer.spec
+
+          grep -Eq '^[[:space:]]*android\.minapi[[:space:]]*=[[:space:]]*24[[:space:]]*$' \
+            buildozer.spec
+
+          grep -Eq '^[[:space:]]*android\.sdk_build_tools[[:space:]]*=[[:space:]]*34\.0\.0[[:space:]]*$' \
+            buildozer.spec
+
+          grep -Eq '^[[:space:]]*android\.ndk[[:space:]]*=[[:space:]]*28c[[:space:]]*$' \
+            buildozer.spec
+
+          grep -Eq '^[[:space:]]*android\.sdk_path[[:space:]]*=[[:space:]]*\.android-sdk[[:space:]]*$' \
+            buildozer.spec
+
+          grep -Eq '^[[:space:]]*android\.archs[[:space:]]*=[[:space:]]*arm64-v8a,armeabi-v7a[[:space:]]*$' \
+            buildozer.spec
+
+          grep -Eq '^[[:space:]]*android\.skip_update[[:space:]]*=[[:space:]]*1[[:space:]]*$' \
+            buildozer.spec
+
+          echo ""
+          echo "Paramètres Android : OK"
+
+          echo ""
+          echo "============================================================"
+          echo "VÉRIFICATION DES VERSIONS PYTHON"
+          echo "============================================================"
+
+          if ! grep -Eq \
+            '^[[:space:]]*requirements[[:space:]]*=.*python3==3\.10\.11.*hostpython3==3\.10\.11' \
+            buildozer.spec; then
+
+            echo ""
+            echo "ERREUR : buildozer.spec doit contenir :"
+            echo ""
+            echo "python3==3.10.11"
+            echo "hostpython3==3.10.11"
+            echo ""
+            echo "Les deux versions doivent être identiques."
+            exit 1
+          fi
+
+          echo ""
+          echo "Python 3.10.11 pour python3 : OK"
+          echo "Python 3.10.11 pour hostpython3 : OK"
+
+          echo ""
+          echo "Validation buildozer.spec : OK"
+
+
+      # ==========================================================
+      # ÉTAPE 13 - VÉRIFIER LA SUPPRESSION DE REPORTLAB
+      # ==========================================================
+      #
+      # ReportLab n'est plus utilisé par l'application.
+      #
+      # Cette vérification ignore les commentaires afin d'éviter
+      # qu'une mention documentaire de "reportlab" ne provoque
+      # inutilement une erreur.
+      #
+      # ==========================================================
 
       - name: "13 - Vérifier la suppression de ReportLab"
         shell: bash
@@ -932,69 +774,71 @@ jobs:
 
           echo ""
           echo "============================================================"
-          echo "VÉRIFICATION REPORTLAB"
+          echo "VÉRIFICATION DE REPORTLAB"
           echo "============================================================"
 
-          # Recherche dans les fichiers Python.
-          if grep -RniE \
-            --include='*.py' \
-            '(^|[^[:alnum:]_])reportlab([^[:alnum:]_]|$)|generer_rapport_pdf' \
-            . \
-            --exclude-dir=.git \
-            --exclude-dir=.buildozer \
-            --exclude-dir=bin; then
+          echo ""
+          echo "Recherche des références actives..."
 
+          FOUND=0
+
+          while IFS= read -r -d '' file; do
+
+            if grep -vE '^[[:space:]]*#' "${file}" \
+              | grep -iE 'reportlab|report_lab'; then
+
+              echo ""
+              echo "ERREUR : référence active à ReportLab trouvée dans :"
+              echo "${file}"
+
+              FOUND=1
+            fi
+
+          done < <(
+            find . \
+              -type f \
+              \( \
+                -name "*.py" \
+                -o -name "requirements.txt" \
+                -o -name "buildozer.spec" \
+                -o -path "./p4a.local_recipes/*" \
+              \) \
+              -print0
+          )
+
+          if [ "${FOUND}" -ne 0 ]; then
             echo ""
-            echo "ERREUR : référence Python active à ReportLab détectée."
+            echo "ReportLab doit être complètement supprimé."
             exit 1
           fi
 
-          # Recherche dans requirements.txt en ignorant commentaires
-          # et lignes vides.
-          if [ -f requirements.txt ]; then
-            if grep -vE '^[[:space:]]*#|^[[:space:]]*$' requirements.txt \
-              | grep -iE '^reportlab([<>=!~]|$)'; then
-
-              echo "ERREUR : ReportLab présent dans requirements.txt."
-              exit 1
-            fi
-          fi
-
-          # Recherche dans buildozer.spec en ignorant les commentaires.
-          if grep -vE '^[[:space:]]*#' buildozer.spec \
-            | grep -iE 'reportlab|generer_rapport_pdf'; then
-
-            echo "ERREUR : référence active à ReportLab dans buildozer.spec."
-            exit 1
-          fi
-
-          # Vérification d'une éventuelle recette locale ReportLab.
-          if [ -d p4a.local_recipes ]; then
-            if find p4a.local_recipes -type f \
-              | grep -iE 'reportlab|pdf'; then
-
-              echo "ERREUR : recette locale potentiellement liée à ReportLab."
-              exit 1
-            fi
-          fi
-
-          echo "Aucune référence active à ReportLab détectée."
+          echo ""
+          echo "Aucune référence active à ReportLab trouvée."
+          echo "Vérification ReportLab : OK."
 
 
-      # ================================================================
-      # ÉTAPE 14 - VÉRIFIER requirements.txt
-      # ================================================================
+      # ==========================================================
+      # ÉTAPE 14 - VÉRIFIER LES DÉPENDANCES PYTHON
+      # ==========================================================
       #
-      # Les dépendances Android nécessaires au projet sont :
+      # Les dépendances Python utilisées par l'application sont :
       #
-      #   python3
-      #   kivy
-      #   plyer
-      #   openpyxl
-      #   pandas
+      #   - kivy
+      #   - plyer
+      #   - openpyxl
       #
-      # ReportLab ne doit pas être présent.
-      # ================================================================
+      # Python 3.10.11 est défini dans buildozer.spec pour :
+      #
+      #   - python3
+      #   - hostpython3
+      #
+      # Pandas a été supprimé.
+      #
+      # OpenPyXL suffit pour générer directement les fichiers Excel.
+      #
+      # ReportLab a également été supprimé.
+      #
+      # ==========================================================
 
       - name: "14 - Vérifier les dépendances Python"
         shell: bash
@@ -1010,150 +854,178 @@ jobs:
             cat requirements.txt
           else
             echo "requirements.txt absent."
-            echo "Les requirements seront lus depuis buildozer.spec."
+            echo "Les dépendances seront lues depuis buildozer.spec."
           fi
 
           echo ""
-          echo "Dépendances Android attendues :"
-          echo "python3"
-          echo "kivy"
-          echo "plyer"
-          echo "openpyxl"
-          echo "pandas"
+          echo "============================================================"
+          echo "VÉRIFICATION DES DÉPENDANCES INTERDITES"
+          echo "============================================================"
+
+          if [ -f requirements.txt ]; then
+
+            if grep -vE '^[[:space:]]*#|^[[:space:]]*$' requirements.txt \
+              | grep -iE '^pandas([<>=!~]|$)'; then
+
+              echo ""
+              echo "ERREUR : Pandas est encore présent dans requirements.txt."
+              echo "Pandas doit être supprimé du projet."
+
+              exit 1
+            fi
+
+          fi
+
+          if [ -f requirements.txt ]; then
+
+            if grep -vE '^[[:space:]]*#|^[[:space:]]*$' requirements.txt \
+              | grep -iE '^reportlab([<>=!~]|$)'; then
+
+              echo ""
+              echo "ERREUR : ReportLab est encore présent dans requirements.txt."
+
+              exit 1
+            fi
+
+          fi
+
+          echo ""
+          echo "============================================================"
+          echo "DÉPENDANCES ATTENDUES"
+          echo "============================================================"
+
+          echo "Kivy      : requis"
+          echo "Plyer     : requis"
+          echo "OpenPyXL  : requis"
+          echo "Pandas    : supprimé"
+          echo "ReportLab : supprimé"
+
+          echo ""
+          echo "Dépendances Python : configuration cohérente."
 
 
-      # ================================================================
-      # ÉTAPE 15 - NETTOYER L'ANCIEN BUILD
-      # ================================================================
+      # ==========================================================
+      # ÉTAPE 15 - NETTOYER L'ANCIEN ENVIRONNEMENT BUILDOZER
+      # ==========================================================
       #
-      # On supprime .buildozer afin d'éviter qu'un ancien état de
-      # python-for-android ou d'une recette interfère avec le build.
+      # Le dossier .buildozer peut contenir :
       #
-      # ATTENTION :
-      # .android-sdk n'est PAS supprimé.
+      #   - d'anciennes recettes ;
+      #   - une ancienne version Python ;
+      #   - un ancien état python-for-android ;
+      #   - des fichiers partiellement compilés.
       #
-      # Le SDK Android préparé précédemment doit être conservé.
-      # ================================================================
+      # On supprime donc :
+      #
+      #   .buildozer
+      #   bin
+      #
+      # MAIS on conserve :
+      #
+      #   .android-sdk
+      #
+      # car il vient d'être préparé explicitement par le workflow.
+      #
+      # ==========================================================
 
-      - name: "15 - Nettoyer l'ancien build Buildozer"
+      - name: "15 - Nettoyer l'ancien environnement Buildozer"
         shell: bash
         run: |
           set -e
+
+          echo ""
+          echo "============================================================"
+          echo "NETTOYAGE BUILDOZER"
+          echo "============================================================"
 
           rm -rf .buildozer
           rm -rf bin
 
-          echo "Ancien environnement Buildozer supprimé."
-          echo "Le SDK .android-sdk est conservé."
+          echo ""
+          echo "Anciens fichiers Buildozer supprimés."
+
+          echo ""
+          echo "Vérification du SDK Android :"
+
+          if [ ! -d ".android-sdk" ]; then
+            echo "ERREUR : .android-sdk ne doit pas être supprimé."
+            exit 1
+          fi
+
+          echo ".android-sdk conservé."
 
 
-      # ================================================================
-      # ÉTAPE 16 - PRÉCHARGER xz-5.2.4 POUR LIBLZMA
-      # ================================================================
+      # ==========================================================
+      # ÉTAPE 16 - PRÉCHARGER L'ARCHIVE XZ / LIBLZMA
+      # ==========================================================
       #
-      # CORRECTIF DU PROBLÈME DE TÉLÉCHARGEMENT LIBLZMA.
+      # Certaines compilations de python-for-android peuvent avoir
+      # besoin de l'archive xz 5.2.4.
       #
-      # L'erreur rencontrée était :
+      # Pour éviter un téléchargement réseau instable pendant la
+      # compilation, l'archive est placée directement dans le
+      # répertoire attendu par la chaîne de build.
       #
-      #   Downloading liblzma from
-      #   https://tukaani.org/xz/xz-5.2.4.tar.gz
+      # MD5 attendu :
       #
-      # puis :
+      #   5ace3264bdd00c65eeec2891346f65e6
       #
-      #   TimeoutError: [Errno 110] Connection timed out
-      #
-      # python-for-android utilise le cache :
-      #
-      #   .buildozer/android/platform/
-      #   build-arm64-v8a_armeabi-v7a/packages/liblzma/
-      #
-      # pour stocker les archives des recettes.
-      #
-      # On télécharge donc directement l'archive dans ce répertoire
-      # AVANT de lancer Buildozer.
-      #
-      # Source utilisée :
-      #
-      #   SourceForge / XZ Utils
-      #
-      # Le MD5 attendu est conservé afin de vérifier l'intégrité
-      # de l'archive téléchargée.
-      # ================================================================
+      # ==========================================================
 
-      - name: "16 - Précharger xz-5.2.4 pour liblzma"
+      - name: "16 - Précharger l'archive xz 5.2.4"
         shell: bash
         run: |
           set -e
 
-          STORAGE_DIR="${GITHUB_WORKSPACE}/.buildozer/android/platform/build-arm64-v8a_armeabi-v7a"
-
-          LIBLZMA_CACHE="${STORAGE_DIR}/packages/liblzma"
-
-          XZ_FILE="${LIBLZMA_CACHE}/xz-5.2.4.tar.gz"
-
-          XZ_URL="https://downloads.sourceforge.net/project/lzmautils/xz-5.2.4.tar.gz"
-
-          XZ_MD5="5ace3264bdd00c65eeec2891346f65e6"
-
-          mkdir -p "${LIBLZMA_CACHE}"
-
           echo ""
           echo "============================================================"
-          echo "PRÉCHARGEMENT DE LIBLZMA"
+          echo "PRÉCHARGEMENT DE XZ 5.2.4"
           echo "============================================================"
 
-          echo "Cache : ${LIBLZMA_CACHE}"
-          echo "Fichier : ${XZ_FILE}"
-          echo "Source : ${XZ_URL}"
+          XZ_DIR="${GITHUB_WORKSPACE}/.buildozer/android/platform/build-arm64-v8a_armeabi-v7a/packages/liblzma"
+          XZ_FILE="${XZ_DIR}/xz-5.2.4.tar.gz"
 
-          # Si une archive correcte existe déjà, elle est conservée.
-          if [ -f "${XZ_FILE}" ]; then
-
-            echo "Archive déjà présente."
-
-          else
-
-            echo "Téléchargement de xz-5.2.4.tar.gz..."
-
-            curl \
-              --fail \
-              --location \
-              --retry 10 \
-              --retry-delay 5 \
-              --retry-all-errors \
-              --connect-timeout 30 \
-              --max-time 300 \
-              -o "${XZ_FILE}.part" \
-              "${XZ_URL}"
-
-            mv "${XZ_FILE}.part" "${XZ_FILE}"
-
-          fi
+          mkdir -p "${XZ_DIR}"
 
           echo ""
-          echo "Vérification de l'archive..."
+          echo "Téléchargement de xz 5.2.4..."
 
-          ACTUAL_MD5="$(md5sum "${XZ_FILE}" | awk '{print $1}')"
-
-          echo "MD5 attendu : ${XZ_MD5}"
-          echo "MD5 obtenu  : ${ACTUAL_MD5}"
-
-          if [ "${ACTUAL_MD5}" != "${XZ_MD5}" ]; then
-            echo ""
-            echo "ERREUR : l'archive xz-5.2.4 est incorrecte."
-            rm -f "${XZ_FILE}"
-            exit 1
-          fi
+          wget -q \
+            "https://sourceforge.net/projects/tukaani/files/xz/v5.2.4/xz-5.2.4.tar.gz/download" \
+            -O "${XZ_FILE}"
 
           echo ""
-          echo "Archive xz-5.2.4 valide."
+          echo "Vérification MD5..."
+
+          echo "5ace3264bdd00c65eeec2891346f65e6  ${XZ_FILE}" \
+            | md5sum -c -
+
+          echo ""
+          echo "Archive xz 5.2.4 prête."
 
           ls -lh "${XZ_FILE}"
 
 
-      # ================================================================
+      # ==========================================================
       # ÉTAPE 17 - VÉRIFICATION FINALE DE L'ENVIRONNEMENT
-      # ================================================================
+      # ==========================================================
+      #
+      # Cette étape vérifie :
+      #
+      #   1. Python du runner ;
+      #   2. Java ;
+      #   3. Buildozer ;
+      #   4. SDK Android ;
+      #   5. sdkmanager moderne ;
+      #   6. wrapper sdkmanager ;
+      #   7. AIDL ;
+      #   8. NDK ;
+      #   9. archive liblzma.
+      #
+      # La version Python Android est vérifiée séparément dans
+      # buildozer.spec.
+      #
+      # ==========================================================
 
       - name: "17 - Vérification finale de l'environnement Android"
         shell: bash
@@ -1168,19 +1040,47 @@ jobs:
           echo "============================================================"
 
           echo ""
-          echo "Java :"
+          echo "============================================================"
+          echo "JAVA"
+          echo "============================================================"
+
           java -version
 
           echo ""
-          echo "Python :"
+          echo "============================================================"
+          echo "PYTHON DU RUNNER"
+          echo "============================================================"
+
           python --version
+          command -v python
+
+          python - <<'PY'
+          import sys
+
+          print("Version complète :", sys.version)
+          print("Exécutable       :", sys.executable)
+
+          if sys.version_info[:2] != (3, 10):
+              raise SystemExit(
+                  "ERREUR : Python du runner différent de 3.10."
+              )
+
+          print("Python runner : OK")
+          PY
 
           echo ""
-          echo "Buildozer :"
+          echo "============================================================"
+          echo "BUILDOZER"
+          echo "============================================================"
+
           buildozer --version
 
           echo ""
-          echo "SDK Android :"
+          echo "============================================================"
+          echo "SDK ANDROID"
+          echo "============================================================"
+
+          echo "SDK :"
           echo "${SDK_ROOT}"
 
           echo ""
@@ -1201,149 +1101,205 @@ jobs:
 
           echo ""
           echo "Archive liblzma préchargée :"
+
           ls -lh \
             "${GITHUB_WORKSPACE}/.buildozer/android/platform/build-arm64-v8a_armeabi-v7a/packages/liblzma/xz-5.2.4.tar.gz"
 
+          echo ""
+          echo "============================================================"
+          echo "ENVIRONNEMENT : OK"
+          echo "============================================================"
 
-      # ================================================================
-      # ÉTAPE 18 - INFORMATIONS BUILDOZER
-      # ================================================================
+
+      # ==========================================================
+      # ÉTAPE 18 - AFFICHER LA CONFIGURATION BUILDOZER
+      # ==========================================================
       #
-      # Cette étape affiche les informations utiles juste avant le
-      # lancement du gros build.
-      # ================================================================
+      # Cette étape est volontairement placée juste avant le build.
+      #
+      # En cas d'échec, le log GitHub montrera exactement la
+      # configuration utilisée.
+      #
+      # ==========================================================
 
-      - name: "18 - Préparer la construction Buildozer"
+      - name: "18 - Afficher la configuration avant compilation"
         shell: bash
         run: |
           set -e
 
           echo ""
           echo "============================================================"
-          echo "PRÉPARATION BUILDOZER"
+          echo "CONFIGURATION BUILDOZER AVANT COMPILATION"
           echo "============================================================"
 
           echo ""
-          echo "ANDROID_HOME :"
-          echo "${ANDROID_HOME}"
+          echo "Python runner :"
+          python --version
 
           echo ""
-          echo "ANDROID_SDK_ROOT :"
-          echo "${ANDROID_SDK_ROOT}"
+          echo "Java :"
+          java -version
 
           echo ""
-          echo "Contenu du SDK :"
-          ls -la "${ANDROID_HOME}"
+          echo "Buildozer :"
+          buildozer --version
 
           echo ""
-          echo "Buildozer spec :"
-          grep -nE \
-            '^[[:space:]]*android\.(api|minapi|sdk_build_tools|ndk|sdk_path|archs|skip_update)[[:space:]]*=' \
-            buildozer.spec \
-            || true
+          echo "buildozer.spec :"
+          cat buildozer.spec
+
+          echo ""
+          echo "requirements.txt :"
+
+          if [ -f requirements.txt ]; then
+            cat requirements.txt
+          else
+            echo "Absent."
+          fi
+
+          echo ""
+          echo "============================================================"
+          echo "CONFIGURATION : FIN"
+          echo "============================================================"
 
 
-      # ================================================================
-      # ÉTAPE 19 - CONSTRUIRE L'APK ANDROID
-      # ================================================================
+      # ==========================================================
+      # ÉTAPE 19 - COMPILER L'APK ANDROID
+      # ==========================================================
       #
-      # Le journal complet est sauvegardé dans :
+      # La sortie complète de Buildozer est enregistrée dans :
       #
       #   buildozer.log
       #
-      # PIPESTATUS permet de récupérer le code retour de Buildozer
-      # et non celui de "tee".
-      # ================================================================
+      # PIPESTATUS[0] permet de récupérer le véritable code retour
+      # de Buildozer malgré l'utilisation de "tee".
+      #
+      # ==========================================================
 
-      - name: "19 - Construire l'APK Android"
+      - name: "19 - Compiler l'application Android"
         shell: bash
         run: |
-          set +e
+          set -o pipefail
 
           echo ""
           echo "============================================================"
-          echo "CONSTRUCTION DE L'APK ANDROID"
+          echo "DÉMARRAGE DE LA COMPILATION ANDROID"
           echo "============================================================"
+
+          echo ""
+          echo "Heure de début :"
+          date
+
+          echo ""
+          echo "Python runner :"
+          python --version
+
+          echo ""
+          echo "Buildozer :"
+          buildozer --version
+
+          echo ""
+          echo "Compilation en cours..."
 
           buildozer -v android debug 2>&1 | tee buildozer.log
 
-          BUILD_EXIT_CODE=${PIPESTATUS[0]}
+          BUILD_STATUS=${PIPESTATUS[0]}
 
           echo ""
           echo "============================================================"
-          echo "CODE RETOUR BUILDOZER : ${BUILD_EXIT_CODE}"
+          echo "FIN DE BUILDOZER"
           echo "============================================================"
 
-          exit "${BUILD_EXIT_CODE}"
+          echo "Code retour Buildozer : ${BUILD_STATUS}"
+
+          if [ "${BUILD_STATUS}" -ne 0 ]; then
+            echo ""
+            echo "ERREUR : la compilation Buildozer a échoué."
+            exit "${BUILD_STATUS}"
+          fi
+
+          echo ""
+          echo "Compilation Buildozer terminée avec succès."
 
 
-      # ================================================================
-      # ÉTAPE 20 - DIAGNOSTIC AUTOMATIQUE EN CAS D'ÉCHEC
-      # ================================================================
+      # ==========================================================
+      # ÉTAPE 20 - AFFICHER LA FIN DU LOG EN CAS D'ERREUR
+      # ==========================================================
       #
-      # Cette étape s'exécute même lorsque l'étape 19 échoue.
+      # Cette étape s'exécute même si Buildozer a échoué.
       #
-      # Elle permet de retrouver immédiatement la vraie erreur sans
-      # parcourir manuellement plusieurs dizaines de milliers de lignes.
-      # ================================================================
+      # Elle affiche les dernières lignes du log ainsi que les
+      # messages d'erreur importants.
+      #
+      # ==========================================================
 
-      - name: "20 - Diagnostiquer l'échec Buildozer"
-        if: failure()
+      - name: "20 - Analyser le log Buildozer"
+        if: always()
         shell: bash
         run: |
           echo ""
-          echo "############################################################"
-          echo "# 300 DERNIÈRES LIGNES DU JOURNAL BUILDOZER"
-          echo "############################################################"
+          echo "============================================================"
+          echo "ANALYSE DU LOG BUILDOZER"
+          echo "============================================================"
 
-          tail -n 300 buildozer.log || true
+          if [ ! -f buildozer.log ]; then
+            echo "buildozer.log absent."
+            exit 0
+          fi
 
           echo ""
-          echo "############################################################"
-          echo "# ERREURS IMPORTANTES DÉTECTÉES"
-          echo "############################################################"
+          echo "============================================================"
+          echo "300 DERNIÈRES LIGNES"
+          echo "============================================================"
+
+          tail -n 300 buildozer.log
+
+          echo ""
+          echo "============================================================"
+          echo "RECHERCHE DES ERREURS"
+          echo "============================================================"
 
           grep -nEi \
-            'error:|error |ERROR:|FAILED|Traceback|ErrorReturnCode|command failed|returned non-zero|No such file|not found|cannot find|undefined reference|TimeoutError|URLError' \
+            'error:|error |failed|fatal|traceback|exception|build failed' \
             buildozer.log \
-            | tail -n 150 \
+            | tail -n 100 \
             || true
 
-          echo ""
-          echo "############################################################"
-          echo "# FIN DU DIAGNOSTIC"
-          echo "############################################################"
 
-
-      # ================================================================
-      # ÉTAPE 21 - SAUVEGARDER LE JOURNAL COMPLET
-      # ================================================================
+      # ==========================================================
+      # ÉTAPE 21 - ARCHIVER LE LOG BUILDOZER
+      # ==========================================================
       #
-      # Même si GitHub tronque l'affichage du log, le fichier complet
-      # reste disponible comme artefact.
-      # ================================================================
+      # Le log est conservé dans GitHub Actions même lorsque le
+      # build échoue.
+      #
+      # Cela permet d'analyser précisément la prochaine erreur
+      # sans devoir relancer immédiatement la compilation.
+      #
+      # ==========================================================
 
-      - name: "21 - Sauvegarder le journal Buildozer"
+      - name: "21 - Archiver le log Buildozer"
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: buildozer-log
+          name: "buildozer-log"
           path: buildozer.log
           if-no-files-found: warn
 
 
-      # ================================================================
-      # ÉTAPE 22 - RECHERCHER L'APK
-      # ================================================================
+      # ==========================================================
+      # ÉTAPE 22 - RECHERCHER L'APK / AAB PRODUIT
+      # ==========================================================
       #
-      # Buildozer place normalement l'APK dans :
+      # Buildozer place normalement les fichiers finaux dans :
       #
       #   bin/
       #
-      # Cette étape affiche précisément les fichiers générés.
-      # ================================================================
+      # Cette étape permet de confirmer leur présence.
+      #
+      # ==========================================================
 
-      - name: "22 - Rechercher l'APK généré"
+      - name: "22 - Rechercher les fichiers Android générés"
         if: success()
         shell: bash
         run: |
@@ -1354,28 +1310,59 @@ jobs:
           echo "FICHIERS ANDROID GÉNÉRÉS"
           echo "============================================================"
 
-          find . \
-            -type f \
-            \( -name "*.apk" -o -name "*.aab" \) \
-            -not -path "./.git/*" \
-            -print
+          echo ""
+          echo "Répertoire bin :"
+
+          if [ -d bin ]; then
+            find bin \
+              -maxdepth 2 \
+              -type f \
+              \( \
+                -name "*.apk" \
+                -o -name "*.aab" \
+              \) \
+              -print
+          else
+            echo "ERREUR : le répertoire bin est absent."
+            exit 1
+          fi
+
+          echo ""
+          echo "============================================================"
+          echo "VÉRIFICATION APK"
+          echo "============================================================"
+
+          APK_COUNT=$(find bin -maxdepth 2 -type f -name "*.apk" | wc -l)
+
+          echo "Nombre d'APK : ${APK_COUNT}"
+
+          if [ "${APK_COUNT}" -eq 0 ]; then
+            echo ""
+            echo "ERREUR : aucun APK n'a été généré."
+            exit 1
+          fi
+
+          echo ""
+          echo "APK trouvé."
 
 
-      # ================================================================
-      # ÉTAPE 23 - PUBLIER L'APK
-      # ================================================================
+      # ==========================================================
+      # ÉTAPE 23 - PUBLIER LES FICHIERS APK / AAB
+      # ==========================================================
       #
-      # L'APK est publié comme artefact GitHub Actions.
+      # Les fichiers Android sont publiés comme artefacts GitHub.
       #
-      # Il sera récupérable depuis la page du workflow terminé.
-      # ================================================================
+      # Le nom de l'artefact permet de distinguer clairement le
+      # résultat du build Android.
+      #
+      # ==========================================================
 
-      - name: "23 - Publier l'APK Android"
+      - name: "23 - Publier les fichiers APK et AAB"
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: suivi-auto-android
+          name: "suivi-auto-android"
           path: |
             bin/*.apk
             bin/*.aab
-          if-no-files-found: error
+          if-no-files-found: warn
