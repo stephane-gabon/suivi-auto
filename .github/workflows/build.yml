@@ -1131,14 +1131,23 @@ jobs:
       # 14 - VÉRIFICATION DE LA SUPPRESSION DE REPORTLAB
       # ==========================================================
       #
-      # ReportLab a été complètement supprimé du build Android.
+      # ReportLab a été supprimé de l'application.
       #
-      # Cette vérification cible uniquement les fichiers qui
-      # peuvent réellement modifier la compilation.
+      # IMPORTANT :
+      # Cette vérification ne doit PAS rechercher simplement le mot
+      # "reportlab" dans tout le fichier.
       #
-      # Le workflow lui-même et README.md ne sont volontairement
-      # PAS inspectés ici, car ils peuvent mentionner ReportLab
-      # pour expliquer qu'il a été supprimé.
+      # Pourquoi ?
+      #
+      # Le buildozer.spec peut contenir des commentaires comme :
+      #
+      #   # ReportLab est volontairement absent.
+      #
+      # Ces commentaires ne sont pas lus comme des dépendances
+      # par Buildozer.
+      #
+      # Nous vérifions donc uniquement les configurations actives
+      # qui pourraient réellement réintroduire ReportLab.
       # ==========================================================
 
       - name: "14 - Vérifier suppression de ReportLab"
@@ -1151,9 +1160,19 @@ jobs:
           echo "================================================"
 
 
-          # ------------------------------------------------------
-          # Vérification des fichiers Python.
-          # ------------------------------------------------------
+          # ======================================================
+          # 14.1 - VÉRIFICATION DES FICHIERS PYTHON
+          # ======================================================
+          #
+          # Ici, une référence ReportLab est réellement dangereuse :
+          #
+          #   from reportlab ...
+          #   import reportlab
+          #   generer_rapport_pdf(...)
+          #
+          # Les fichiers Python ne doivent donc contenir aucune
+          # référence ReportLab.
+          # ======================================================
 
           echo
           echo "Recherche dans les fichiers Python..."
@@ -1173,38 +1192,135 @@ jobs:
             exit 1
           fi
 
+          echo "Aucune référence ReportLab dans le code Python."
+
+
+          # ======================================================
+          # 14.2 - VÉRIFICATION DES DÉPENDANCES DE BUILDOZER.SPEC
+          # ======================================================
+          #
+          # On supprime les commentaires avant d'effectuer la
+          # recherche.
+          #
+          # Ainsi :
+          #
+          #   # ReportLab est supprimé
+          #
+          # ne déclenche pas une fausse erreur.
+          #
+          # Mais :
+          #
+          #   requirements = python3,kivy,reportlab,pandas
+          #
+          # déclenchera bien une erreur.
+          # ======================================================
+
+          echo
+          echo "Vérification des paramètres actifs de buildozer.spec..."
 
           # ------------------------------------------------------
-          # Vérification du buildozer.spec.
+          # Création d'une copie temporaire nettoyée.
+          #
+          # On supprime :
+          #
+          # - les lignes vides ;
+          # - les commentaires commençant par # ;
+          # - les commentaires commençant par ;
+          #
+          # Le fichier original n'est jamais modifié.
+          # ------------------------------------------------------
+
+          SPEC_CLEAN="${RUNNER_TEMP}/buildozer-spec-clean.txt"
+
+          sed \
+            -E \
+            '/^[[:space:]]*[#;]/d' \
+            buildozer.spec \
+            > "${SPEC_CLEAN}"
+
+
+          # ------------------------------------------------------
+          # Affichage de la configuration active.
           # ------------------------------------------------------
 
           echo
-          echo "Recherche dans buildozer.spec..."
+          echo "Configuration active de buildozer.spec :"
+
+          cat "${SPEC_CLEAN}"
+
+
+          # ------------------------------------------------------
+          # Recherche d'une dépendance ReportLab active.
+          # ------------------------------------------------------
+
+          echo
+          echo "Recherche de ReportLab dans les dépendances..."
 
           if grep -niE \
-            "reportlab|generer_rapport_pdf|p4a\.local_recipes" \
-            buildozer.spec; then
+            '^[[:space:]]*requirements[[:space:]]*=.*(^|[,[:space:]])reportlab([<>=!~0-9]|[,[:space:]]|$)' \
+            "${SPEC_CLEAN}"; then
 
             echo
-            echo "ERREUR : buildozer.spec contient encore"
-            echo "une référence interdite."
+            echo "ERREUR : ReportLab est encore présent dans"
+            echo "les dépendances actives de buildozer.spec."
 
             exit 1
           fi
 
 
           # ------------------------------------------------------
-          # Vérification de requirements.txt.
+          # Recherche d'une recette locale Python-for-Android.
+          #
+          # Une configuration active comme :
+          #
+          #   p4a.local_recipes = p4a-recipes
+          #
+          # doit également être absente.
           # ------------------------------------------------------
+
+          echo
+          echo "Recherche de recettes locales..."
+
+          if grep -niE \
+            '^[[:space:]]*p4a\.local_recipes[[:space:]]*=' \
+            "${SPEC_CLEAN}"; then
+
+            echo
+            echo "ERREUR : p4a.local_recipes est encore configuré."
+
+            exit 1
+          fi
+
+
+          # ======================================================
+          # 14.3 - VÉRIFICATION DE requirements.txt
+          # ======================================================
 
           if [ -f requirements.txt ]; then
 
             echo
-            echo "Recherche dans requirements.txt..."
+            echo "Vérification de requirements.txt..."
+
+            # ----------------------------------------------------
+            # Les commentaires et lignes vides sont ignorés.
+            # ----------------------------------------------------
+
+            REQUIREMENTS_CLEAN="${RUNNER_TEMP}/requirements-clean.txt"
+
+            sed \
+              -E \
+              '/^[[:space:]]*#/d; /^[[:space:]]*$/d' \
+              requirements.txt \
+              > "${REQUIREMENTS_CLEAN}"
+
+
+            # ----------------------------------------------------
+            # ReportLab ne doit pas apparaître comme dépendance.
+            # ----------------------------------------------------
 
             if grep -niE \
-              "^[[:space:]]*reportlab([<>=!~]|$)" \
-              requirements.txt; then
+              '^[[:space:]]*reportlab([<>=!~]|$)' \
+              "${REQUIREMENTS_CLEAN}"; then
 
               echo
               echo "ERREUR : ReportLab est encore présent"
@@ -1213,41 +1329,66 @@ jobs:
               exit 1
             fi
 
+            echo "requirements.txt : aucune dépendance ReportLab."
+
+          else
+
+            echo
+            echo "AVERTISSEMENT : requirements.txt est absent."
+
           fi
 
 
-          # ------------------------------------------------------
-          # Vérification d'éventuelles recettes locales.
-          # ------------------------------------------------------
+          # ======================================================
+          # 14.4 - VÉRIFICATION DES RECETTES LOCALES
+          # ======================================================
 
           if [ -d p4a-recipes ]; then
 
             echo
-            echo "Vérification de p4a-recipes..."
+            echo "Vérification du répertoire p4a-recipes..."
 
-            if find p4a-recipes \
-              -iname "*reportlab*" \
-              -print |
-              grep -q .; then
-
-              echo
-              echo "ERREUR : une recette ReportLab existe encore"
-              echo "dans p4a-recipes/."
-
+            REPORTLAB_RECIPES="$(
               find p4a-recipes \
                 -iname "*reportlab*" \
                 -print
+            )"
+
+            if [ -n "${REPORTLAB_RECIPES}" ]; then
+
+              echo
+              echo "ERREUR : une recette ReportLab existe encore :"
+
+              echo "${REPORTLAB_RECIPES}"
 
               exit 1
             fi
 
+            echo "Aucune recette ReportLab dans p4a-recipes/."
+
+          else
+
+            echo
+            echo "p4a-recipes/ absent : aucune recette locale."
+
           fi
 
 
+          # ======================================================
+          # 14.5 - RÉSULTAT FINAL
+          # ======================================================
+
           echo
           echo "================================================"
-          echo "REPORTLAB : ABSENT DU BUILD"
+          echo "REPORTLAB : CORRECTEMENT SUPPRIMÉ"
           echo "================================================"
+
+          echo
+          echo "Les commentaires documentaires ne sont pas considérés"
+          echo "comme des dépendances."
+
+          echo
+          echo "Aucune référence ReportLab active n'a été détectée."
 
 
       # ==========================================================
