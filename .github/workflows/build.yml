@@ -490,28 +490,36 @@ jobs:
           echo "NDK 28.2.13676358    : OK"
           echo "AIDL                  : OK"
 
+
       # ================================================================
       # ÉTAPE 10 - COMPATIBILITÉ SDKMANAGER / BUILDOZER 1.6.0
       # ================================================================
       #
-      # Buildozer 1.6.0 cherche encore le sdkmanager à :
+      # Buildozer 1.6.0 recherche encore le sdkmanager à :
       #
       #   .android-sdk/tools/bin/sdkmanager
       #
-      # alors que les Command-line Tools modernes l'installent à :
+      # alors que les Android Command-line Tools modernes utilisent :
       #
       #   .android-sdk/cmdline-tools/latest/bin/sdkmanager
       #
-      # Nous créons donc un VRAI SCRIPT wrapper.
+      # Nous créons donc un véritable script wrapper.
       #
       # IMPORTANT :
-      # Il ne faut pas créer un lien symbolique de "bin" vers le
-      # répertoire moderne : cela peut provoquer :
+      # Ce n'est PAS un lien symbolique.
       #
-      #   ClassNotFoundException:
-      #   com.android.sdklib.tool.sdkmanager.SdkManagerCli
+      # Le wrapper transmet simplement tous les arguments au
+      # sdkmanager moderne.
       #
-      # Le wrapper appelle explicitement le sdkmanager moderne.
+      # Depuis :
+      #
+      #   .android-sdk/tools/bin/
+      #
+      # il faut remonter de DEUX niveaux pour retrouver :
+      #
+      #   .android-sdk/
+      #
+      # et non de trois niveaux.
       # ================================================================
 
       - name: "10 - Créer le wrapper sdkmanager pour Buildozer 1.6.0"
@@ -525,54 +533,116 @@ jobs:
           LEGACY_DIR="${SDK_ROOT}/tools/bin"
           LEGACY_SDKMANAGER="${LEGACY_DIR}/sdkmanager"
 
-          test -x "${MODERN_SDKMANAGER}"
+          echo ""
+          echo "============================================================"
+          echo "CRÉATION DU WRAPPER SDKMANAGER"
+          echo "============================================================"
 
+          echo "SDK_ROOT :"
+          echo "${SDK_ROOT}"
+
+          echo ""
+          echo "SDKMANAGER moderne :"
+          echo "${MODERN_SDKMANAGER}"
+
+          # Vérification du sdkmanager moderne.
+          if [ ! -x "${MODERN_SDKMANAGER}" ]; then
+            echo ""
+            echo "ERREUR : sdkmanager moderne introuvable ou non exécutable."
+            echo "${MODERN_SDKMANAGER}"
+            exit 1
+          fi
+
+          # Création du répertoire attendu historiquement par Buildozer.
           mkdir -p "${LEGACY_DIR}"
 
+          # Création du wrapper.
           cat > "${LEGACY_SDKMANAGER}" <<'EOF'
-          
           #!/usr/bin/env bash
           
           # ================================================================
           # Wrapper de compatibilité pour Buildozer 1.6.0.
           #
-          # Buildozer cherche encore :
+          # Buildozer recherche historiquement :
           #
           #   .android-sdk/tools/bin/sdkmanager
           #
-          # Le véritable sdkmanager moderne est :
+          # Le véritable sdkmanager moderne est situé ici :
           #
           #   .android-sdk/cmdline-tools/latest/bin/sdkmanager
           #
-          # Ce script transmet tous les arguments au sdkmanager moderne.
+          # Le script calcule la racine .android-sdk en remontant :
+          #
+          #   tools/bin -> tools -> .android-sdk
+          #
+          # soit DEUX niveaux.
           # ================================================================
-      
+          
+          set -e
+          
           SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
           
-          SDK_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+          # Depuis :
+          #   .android-sdk/tools/bin
+          #
+          # ../.. donne :
+          #   .android-sdk
+          #
+          SDK_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
           
-          exec "${SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager" "$@"
+          MODERN_SDKMANAGER="${SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager"
+          
+          # Vérification de sécurité avant exécution.
+          if [ ! -x "${MODERN_SDKMANAGER}" ]; then
+              echo "ERREUR : sdkmanager moderne introuvable :"
+              echo "${MODERN_SDKMANAGER}"
+              exit 1
+          fi
+          
+          # Transmet tous les arguments au sdkmanager moderne.
+          exec "${MODERN_SDKMANAGER}" "$@"
           EOF
-    
-              chmod +x "${LEGACY_SDKMANAGER}"
-    
-              echo ""
-              echo "============================================================"
-              echo "TEST SDKMANAGER MODERNE"
-              echo "============================================================"
-    
-              "${MODERN_SDKMANAGER}" --version
-    
-              echo ""
-              echo "============================================================"
-              echo "TEST WRAPPER BUILDOZER"
-              echo "============================================================"
-    
-              "${LEGACY_SDKMANAGER}" --version
-    
-              echo ""
-              echo "Wrapper créé :"
-              echo "${LEGACY_SDKMANAGER}"
+
+          chmod +x "${LEGACY_SDKMANAGER}"
+
+          echo ""
+          echo "============================================================"
+          echo "TEST SDKMANAGER MODERNE"
+          echo "============================================================"
+
+          "${MODERN_SDKMANAGER}" --version
+
+          echo ""
+          echo "============================================================"
+          echo "TEST WRAPPER BUILDOZER"
+          echo "============================================================"
+
+          "${LEGACY_SDKMANAGER}" --version
+
+          echo ""
+          echo "============================================================"
+          echo "VÉRIFICATION DES CHEMINS"
+          echo "============================================================"
+
+          echo "Wrapper :"
+          echo "${LEGACY_SDKMANAGER}"
+
+          echo ""
+          echo "SDK root calculé par le wrapper :"
+          (
+            SCRIPT_DIR="$(cd "$(dirname "${LEGACY_SDKMANAGER}")" && pwd)"
+            cd "${SCRIPT_DIR}/../.."
+            pwd
+          )
+
+          echo ""
+          echo "SDKMANAGER moderne :"
+          echo "${MODERN_SDKMANAGER}"
+
+          echo ""
+          echo "============================================================"
+          echo "SDKMANAGER : COMPATIBILITÉ OK"
+          echo "============================================================"
 
 
       # ================================================================
