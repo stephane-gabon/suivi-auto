@@ -32,13 +32,12 @@ version = 1.0
 # DÉPENDANCES PYTHON
 # ==========================================================
 
+# Python 3.10 est explicitement demandé à python-for-android.
+# Cela évite que la version Python cible soit choisie implicitement.
 #
-# L'application conserve :
-# - Kivy
-# - Plyer
-# - OpenPyXL
-# 
-requirements = python3,kivy,plyer,openpyxl
+# OpenPyXL assure directement la génération des fichiers Excel.
+# Pandas n'est pas nécessaire pour l'application.
+requirements = python3==3.10.11,kivy,plyer,openpyxl
 
 
 # ==========================================================
