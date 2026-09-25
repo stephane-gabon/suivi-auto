@@ -28,16 +28,23 @@ source.include_exts = py,png,jpg,jpeg,kv,atlas,json,txt,ttf,otf
 version = 1.0
 
 
-# ==========================================================
-# DÉPENDANCES PYTHON
-# ==========================================================
-
-# Python 3.10 est explicitement demandé à python-for-android.
-# Cela évite que la version Python cible soit choisie implicitement.
+# ================================================================
+# DÉPENDANCES PYTHON POUR ANDROID
+# ================================================================
 #
-# OpenPyXL assure directement la génération des fichiers Excel.
-# Pandas n'est pas nécessaire pour l'application.
-requirements = python3==3.10.11,kivy,plyer,openpyxl
+# Python 3.10.11 est imposé à la fois pour :
+#
+#   - python3      : Python embarqué dans l'application Android ;
+#   - hostpython3  : Python utilisé pour construire les modules
+#                    Python pendant la compilation.
+#
+# Les deux versions DOIVENT être identiques.
+#
+# OpenPyXL est utilisé directement pour la génération des fichiers
+# Excel. Pandas n'est donc plus nécessaire.
+# ================================================================
+
+requirements = python3==3.10.11,hostpython3==3.10.11,kivy,plyer,openpyxl
 
 
 # ==========================================================
