@@ -9,12 +9,11 @@ source.include_exts = py,png,jpg,jpeg,kv,atlas,json,txt,ttf,otf
 
 version = 1.0
 
-requirements = python3,kivy,plyer,openpyxl,pandas,reportlab
+requirements = python3,kivy,plyer,openpyxl,pandas
 
 orientation = portrait
 
 fullscreen = 0
-
 
 
 [buildozer]
@@ -27,9 +26,6 @@ warn_on_root = 1
 
 android.api = 33
 android.minapi = 24
-android.sdk_build_tools = 35.0.0
+android.sdk_build_tools = 34.0.0
 android.ndk = 28c
 android.archs = arm64-v8a,armeabi-v7a
-
-
-
