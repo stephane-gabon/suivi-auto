@@ -1203,54 +1203,92 @@ jobs:
 
 
       # ==========================================================
-      # ÉTAPE 18 - AFFICHER LA CONFIGURATION BUILDOZER
+      # ÉTAPE 18 - DIAGNOSTIC FINAL AVANT COMPILATION
       # ==========================================================
       #
-      # Cette étape est volontairement placée juste avant le build.
+      # Cette étape vérifie l'environnement qui sera utilisé par
+      # Buildozer avant de lancer la compilation.
       #
-      # En cas d'échec, le log GitHub montrera exactement la
-      # configuration utilisée.
+      # IMPORTANT :
+      #
+      # Le virtualenv interne de python-for-android n'existe pas
+      # nécessairement encore à ce stade.
+      #
+      # On ne tente donc pas de modifier directement :
+      #
+      #   .buildozer/android/platform/build-*/build/venv
+      #
+      # On vérifie uniquement les outils disponibles sur le runner
+      # et la configuration du projet.
       #
       # ==========================================================
 
-      - name: "18 - Afficher la configuration avant compilation"
+      - name: "18 - Diagnostic final avant compilation"
         shell: bash
         run: |
           set -e
 
           echo ""
           echo "============================================================"
-          echo "CONFIGURATION BUILDOZER AVANT COMPILATION"
+          echo "DIAGNOSTIC FINAL"
           echo "============================================================"
 
           echo ""
-          echo "Python runner :"
+          echo "============================================================"
+          echo "PYTHON DU RUNNER"
+          echo "============================================================"
+
           python --version
+          python -m pip --version
 
           echo ""
-          echo "Java :"
-          java -version
+          echo "============================================================"
+          echo "BUILDOZER"
+          echo "============================================================"
 
-          echo ""
-          echo "Buildozer :"
           buildozer --version
 
           echo ""
-          echo "buildozer.spec :"
-          cat buildozer.spec
+          echo "============================================================"
+          echo "CYTHON"
+          echo "============================================================"
+
+          cython --version
 
           echo ""
-          echo "requirements.txt :"
+          echo "============================================================"
+          echo "CONFIGURATION PYTHON ANDROID"
+          echo "============================================================"
+
+          grep -nE \
+            '^[[:space:]]*requirements[[:space:]]*=' \
+            buildozer.spec \
+            || true
+
+          echo ""
+          echo "============================================================"
+          echo "CONFIGURATION ANDROID"
+          echo "============================================================"
+
+          grep -nE \
+            '^[[:space:]]*android\.' \
+            buildozer.spec \
+            || true
+
+          echo ""
+          echo "============================================================"
+          echo "REQUIREMENTS.TXT"
+          echo "============================================================"
 
           if [ -f requirements.txt ]; then
             cat requirements.txt
           else
-            echo "Absent."
+            echo "requirements.txt absent."
           fi
 
           echo ""
           echo "============================================================"
-          echo "CONFIGURATION : FIN"
+          echo "ENVIRONNEMENT PRÊT POUR BUILDOZER"
           echo "============================================================"
 
 
