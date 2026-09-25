@@ -5,20 +5,26 @@ Ce module gère uniquement l'export Excel.
 
 La génération PDF a été supprimée volontairement afin de
 simplifier la compilation Android avec Buildozer/python-for-android.
+
+Pandas n'est volontairement pas utilisé :
+OpenPyXL suffit pour générer directement les fichiers .xlsx
+et évite une dépendance native lourde lors de la compilation Android.
 """
 
 from pathlib import Path
 from datetime import datetime
 
-import pandas as pd
+from openpyxl import Workbook
 
 
 # ================================================================
 # RÉPERTOIRE DES EXPORTS
 # ================================================================
 
+# Répertoire dans lequel les fichiers Excel seront enregistrés.
 EXPORT_DIR = Path("exports")
 
+# Création automatique du répertoire s'il n'existe pas encore.
 EXPORT_DIR.mkdir(
     parents=True,
     exist_ok=True,
@@ -35,7 +41,7 @@ def generer_rapport_excel(
     date_fin=None,
 ):
     """
-    Génère un fichier Excel.
+    Génère un fichier Excel contenant les informations du rapport.
 
     Les paramètres sont conservés afin de rester compatibles avec
     le reste de l'application.
@@ -61,47 +67,76 @@ def generer_rapport_excel(
     # Nom du fichier
     # ------------------------------------------------------------
 
+    # Génération d'un horodatage afin d'éviter d'écraser un
+    # précédent rapport.
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-    filename = (
-        f"rapport_{timestamp}.xlsx"
-    )
+    filename = f"rapport_{timestamp}.xlsx"
 
     output_path = EXPORT_DIR / filename
 
 
     # ------------------------------------------------------------
-    # Données de base
-    #
-    # Cette partie peut être adaptée selon les données réellement
-    # utilisées par l'application.
+    # Création du classeur Excel
     # ------------------------------------------------------------
 
-    data = {
-        "Véhicule": [
-            vehicule_id if vehicule_id is not None else ""
-        ],
-        "Date début": [
-            date_debut if date_debut is not None else ""
-        ],
-        "Date fin": [
-            date_fin if date_fin is not None else ""
-        ],
-    }
+    # OpenPyXL permet de créer directement un fichier .xlsx
+    # sans passer par Pandas.
+    workbook = Workbook()
 
+    # La feuille active est utilisée pour le rapport.
+    worksheet = workbook.active
 
-    dataframe = pd.DataFrame(data)
+    # Nom explicite de la feuille.
+    worksheet.title = "Rapport"
 
 
     # ------------------------------------------------------------
-    # Création du fichier Excel
+    # En-têtes
     # ------------------------------------------------------------
 
-    dataframe.to_excel(
-        output_path,
-        index=False,
-        engine="openpyxl",
+    worksheet.append(
+        [
+            "Véhicule",
+            "Date début",
+            "Date fin",
+        ]
     )
 
+
+    # ------------------------------------------------------------
+    # Données
+    # ------------------------------------------------------------
+
+    worksheet.append(
+        [
+            vehicule_id if vehicule_id is not None else "",
+            date_debut if date_debut is not None else "",
+            date_fin if date_fin is not None else "",
+        ]
+    )
+
+
+    # ------------------------------------------------------------
+    # Ajustement de la largeur des colonnes
+    # ------------------------------------------------------------
+
+    # Ces largeurs rendent le fichier plus lisible lorsqu'il
+    # est ouvert avec Excel ou LibreOffice.
+    worksheet.column_dimensions["A"].width = 20
+    worksheet.column_dimensions["B"].width = 20
+    worksheet.column_dimensions["C"].width = 20
+
+
+    # ------------------------------------------------------------
+    # Enregistrement du fichier
+    # ------------------------------------------------------------
+
+    workbook.save(output_path)
+
+
+    # ------------------------------------------------------------
+    # Retour du chemin du fichier créé
+    # ------------------------------------------------------------
 
     return str(output_path)
