@@ -128,6 +128,17 @@ android.skip_update = 1
 # ==========================================================
 # PYTHON-FOR-ANDROID
 # ==========================================================
+#
+# Utilisation du checkout p4a préparé et corrigé par GitHub Actions.
+#
+# Le workflow place le code p4a dans :
+#
+#   .p4a/
+#
+# afin de contrôler précisément son comportement et son pip interne.
+# ================================================================
+
+p4a.source_dir = .p4a
 
 # Bootstrap Kivy/SDL2 standard.
 p4a.bootstrap = sdl2
